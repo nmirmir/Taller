@@ -6,11 +6,13 @@ from datetime import datetime
 ## CONEXION A LA BASE DE DATOS
 
 def create_connection():
-    """Create a database connection to a SQLite database"""
+    """Create a database connection to a SQLite database
+    
+    Returns:
+        Connection object or None if connection fails
+    """
     try:
-        conn = sqlite3.connect('taller.db', timeout=20)
-        conn.execute('PRAGMA foreign_keys = ON;')
-        print("Successfully connected to SQLite database")
+        conn = sqlite3.connect('inventory.db')
         return conn
     except Error as e:
         print(f"Error connecting to database: {e}")
@@ -19,23 +21,42 @@ def create_connection():
 
 ## CREACION DE LAS TABLAS
 def create_table(conn):
-    """Create tables and add default values"""
+    """Create all necessary tables and add default values
+    
+    Args:
+        conn: Database connection object
+    """
     try:
         cursor = conn.cursor()
         
-        # Enable foreign key support
+        # Enable foreign key support for referential integrity
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        # Creating the users table
-        create_users_table = """
-        CREATE TABLE IF NOT EXISTS users (
+        # Create zones table - Stores different areas/locations
+        create_zones_table = """
+        CREATE TABLE IF NOT EXISTS zones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL
         );
         """
         
-        # Creating the objects table with correct structure
+        # Create categories table - Object classifications
+        create_categories_table = """
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        );
+        """
+        
+        # Create statuses table - Current state of objects
+        create_statuses_table = """
+        CREATE TABLE IF NOT EXISTS statuses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        );
+        """
+        
+        # Create main objects table with all necessary fields and foreign keys
         create_objects_table = """
         CREATE TABLE IF NOT EXISTS objects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,8 +69,8 @@ def create_table(conn):
             status_id INTEGER NOT NULL,
             creation_user TEXT NOT NULL,
             modification_user TEXT NOT NULL,
-            creation_date DATE DEFAULT CURRENT_TIMESTAMP,
-            modification_date DATE DEFAULT CURRENT_TIMESTAMP,
+            creation_date DATE NOT NULL,
+            modification_date DATE NOT NULL,
             deletion_date DATE,
             deletion_user TEXT,
             FOREIGN KEY (category_id) REFERENCES categories(id),
@@ -57,137 +78,24 @@ def create_table(conn):
             FOREIGN KEY (status_id) REFERENCES statuses(id)
         );
         """
-        # Creating the categories table
-        create_categories_table = """
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            creation_date DATE NOT NULL,
-            creation_user TEXT NOT NULL
-        );
-        """
-        # Creating the statuses table
-        create_statuses_table = """
-        CREATE TABLE IF NOT EXISTS statuses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL
-        );
-        """
-        # Creating Zona de mecanizado table
-        create_zona_de_mecanizado_table = """
-        CREATE TABLE IF NOT EXISTS zona_de_mecanizado (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            objects_id INTEGER NOT NULL,
-            FOREIGN KEY (objects_id) 
-                REFERENCES objects(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE
-        );
-        """
-        # Creating Zona de soldadura table
-        create_zona_de_soldadura_table = """
-        CREATE TABLE IF NOT EXISTS zona_de_soldadura (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            objects_id INTEGER NOT NULL,
-            FOREIGN KEY (objects_id) 
-                REFERENCES objects(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE
-        );
-        """
-        # Creating Zona de impresion table
-        create_zona_de_impresion_table = """
-        CREATE TABLE IF NOT EXISTS zona_de_impresion (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            objects_id INTEGER NOT NULL,
-            FOREIGN KEY (objects_id) 
-                REFERENCES objects(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE
-        );
-        """
-        # Creating Zona del laser table
-        create_zona_del_laser_table = """
-        CREATE TABLE IF NOT EXISTS zona_del_laser (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            objects_id INTEGER NOT NULL,
-            FOREIGN KEY (objects_id) 
-                REFERENCES objects(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE
-        );
-        """ 
-        # Creating the objects table
-        create_objects_table = """
-        CREATE TABLE IF NOT EXISTS objects (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            price DECIMAL(10, 2) NOT NULL,
-            quantity INTEGER NOT NULL,
-            category_id INTEGER NOT NULL,
-            zone_id INTEGER NOT NULL,
-            creation_date DATE NOT NULL,
-            modification_date DATE NOT NULL,
-            deletion_date DATE,
-            status_id INTEGER NOT NULL,
-            creation_user TEXT NOT NULL,
-            modification_user TEXT NOT NULL,
-            deletion_user TEXT,
-            FOREIGN KEY (category_id) 
-                REFERENCES categories(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE,
-            FOREIGN KEY (zone_id) 
-                REFERENCES zones(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE,
-            FOREIGN KEY (status_id) 
-                REFERENCES statuses(id) 
-                ON DELETE CASCADE 
-                ON UPDATE CASCADE
-        );
-        """
-        # Creating the zones table
-        create_zones_table = """
-        CREATE TABLE IF NOT EXISTS zones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            creation_date DATE NOT NULL,
-            creation_user TEXT NOT NULL
-        );
-        """
-
         
-        # Execute all create table statements
-        cursor.execute(create_users_table)
-        cursor.execute(create_zones_table)
+        # Execute all create statements in correct order
         cursor.execute(create_categories_table)
         cursor.execute(create_statuses_table)
-        cursor.execute(create_zona_de_mecanizado_table)
-        cursor.execute(create_zona_de_soldadura_table)
-        cursor.execute(create_zona_de_impresion_table)
-        cursor.execute(create_zona_del_laser_table)
+        cursor.execute(create_zones_table)
         cursor.execute(create_objects_table)
         
-        # Add default categories if they don't exist
-        current_time = datetime.now().strftime('%Y-%m-%d')
+        # Insert default categories if they don't exist
         cursor.execute("""
-        INSERT OR IGNORE INTO categories (id, name, description, creation_date, creation_user) 
+        INSERT OR IGNORE INTO categories (id, name) 
         VALUES 
-            (1, 'Tools', 'Workshop tools and equipment', ?, 'system'),
-            (2, 'Materials', 'Raw materials', ?, 'system'),
-            (3, 'Consumables', 'Consumable items', ?, 'system'),
-            (4, 'Equipment', 'Large equipment', ?, 'system');
-        """, (current_time, current_time, current_time, current_time))
+            (1, 'Tools'),
+            (2, 'Materials'),
+            (3, 'Consumables'),
+            (4, 'Equipment');
+        """)
 
-        # Add default statuses if they don't exist
+        # Insert default statuses if they don't exist
         cursor.execute("""
         INSERT OR IGNORE INTO statuses (id, name) 
         VALUES 
@@ -197,15 +105,15 @@ def create_table(conn):
             (4, 'Reserved');
         """)
 
-        # Add default zones if they don't exist
+        # Insert default zones if they don't exist
         cursor.execute("""
-        INSERT OR IGNORE INTO zones (id, name, description, creation_date, creation_user) 
+        INSERT OR IGNORE INTO zones (id, name) 
         VALUES 
-            (1, 'Zona de Mecanizado', 'Area for machining operations', ?, 'system'),
-            (2, 'Zona de Soldadura', 'Welding and joining area', ?, 'system'),
-            (3, 'Zona de Impresion', 'Printing and additive manufacturing', ?, 'system'),
-            (4, 'Zona del Laser', 'Laser cutting and engraving', ?, 'system');
-        """, (current_time, current_time, current_time, current_time))
+            (1, 'Zona de Mecanizado'),
+            (2, 'Zona de Soldadura'),
+            (3, 'Zona de Impresion'),
+            (4, 'Zona del Laser');
+        """)
 
         conn.commit()
         print("Tables and default values created successfully")
@@ -215,39 +123,74 @@ def create_table(conn):
 
 ## INSERTAR UN OBJETO
 def add_object(conn, object_data):
-    """Add a new object"""
+    """Add a new object to the database
+    
+    Args:
+        conn: Database connection object
+        object_data: Tuple containing object details
+        
+    Returns:
+        int: ID of the newly created object, or None if failed
+    """
     try:
         cursor = conn.cursor()
+        current_time = datetime.now().strftime('%Y-%m-%d')
         
         sql = """INSERT INTO objects(
             name, description, price, quantity, 
             category_id, zone_id, status_id,
-            creation_user, modification_user
-        ) VALUES(?,?,?,?,?,?,?,?,?)"""
+            creation_user, modification_user,
+            creation_date, modification_date,
+            deletion_date, deletion_user
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"""
         
-        cursor.execute(sql, object_data)
+        # Add creation_date, modification_date, and NULL for deletion fields
+        complete_object = (
+            *object_data,      # Original data
+            current_time,      # creation_date
+            current_time,      # modification_date
+            None,             # deletion_date
+            None              # deletion_user
+        )
+        
+        cursor.execute(sql, complete_object)
         conn.commit()
-        print("Object added successfully")
         return cursor.lastrowid
     except Error as e:
         print(f"Error adding object: {e}")
         return None
 ## ELIMINAR UN OBJETO
 def delete_object(conn, object_id, deletion_user):
-    """Soft delete an object by updating its deletion information"""
+    """Delete an object from the database"""
     try:
         cursor = conn.cursor()
         current_time = datetime.now().strftime('%Y-%m-%d')
         
+        # First check if object exists and is not already deleted
+        cursor.execute("""
+            SELECT id FROM objects 
+            WHERE id = ? AND deletion_date IS NULL
+        """, (object_id,))
+        
+        if not cursor.fetchone():
+            print("Object not found or already deleted")
+            return False
+        
+        # Update the object with deletion info
         sql = """UPDATE objects 
-                SET deletion_date = ?,
-                    deletion_user = ?,
-                    status_id = ?
-                WHERE id = ?"""
+                SET deletion_date = ?, 
+                    deletion_user = ?
+                WHERE id = ? 
+                AND deletion_date IS NULL"""
                 
-        cursor.execute(sql, (current_time, deletion_user, 0, object_id))  # Assuming status_id 0 means deleted
+        cursor.execute(sql, (current_time, deletion_user, object_id))
         conn.commit()
-        print("Object deleted successfully")
+        
+        if cursor.rowcount == 0:
+            print("Failed to delete object")
+            return False
+            
+        print(f"Object {object_id} marked as deleted by {deletion_user} on {current_time}")
         return True
     except Error as e:
         print(f"Error deleting object: {e}")
@@ -312,6 +255,13 @@ def update_object(conn, object_id, update_data, modification_user):
         print(f"Error updating object: {e}")
         return False
 
+def list_zones(conn):
+    """List all zones"""
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM zones")
+    rows = cursor.fetchall()
+    return rows #return the zones
+
 ## INSERTAR UN USUARIO
 def insert_user(conn, user):
     """Insert a new user into the users table"""
@@ -346,11 +296,31 @@ def get_all_users(conn):
 
 ## OBTENER TODOS LOS OBJETOS
 def get_all_objects(conn):
-    """Get all objects"""
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM objects")
-    rows = cursor.fetchall()
-    return rows #return the objects
+    """Retrieve all non-deleted objects with their status
+    
+    Args:
+        conn: Database connection object
+        
+    Returns:
+        list: List of tuples containing object details
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT o.id, o.name, o.description, o.price, o.quantity, s.name as status
+            FROM objects o
+            JOIN statuses s ON o.status_id = s.id
+            WHERE o.deletion_date IS NULL
+            ORDER BY o.id
+        """)
+        objects = cursor.fetchall()
+        if not objects:
+            print("No objects found")
+            return []
+        return objects
+    except Error as e:
+        print(f"Error getting objects: {e}")
+        return []
 
 ## OBTENER UNA ZONA POR SU ID
 def get_zone_by_id(conn, id ):
@@ -376,30 +346,90 @@ def get_all_statuses(conn):
     rows = cursor.fetchall()
     return rows #return the statuses    
 
+## OBTENER TODAS LAS ZONAS
+def get_all_zones(conn):
+    """Retrieve all zones from database
+    
+    Args:
+        conn: Database connection object
+        
+    Returns:
+        list: List of tuples containing zone details
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name 
+            FROM zones 
+            ORDER BY id
+        """)
+        return cursor.fetchall()
+    except Error as e:
+        print(f"Error getting zones: {e}")
+        return []
+
 ## AGREGAR UNA ZONA
 def add_zone(conn, zone_data):
     """Add a new zone"""
     try:
         cursor = conn.cursor()
-        current_time = datetime.now().strftime('%Y-%m-%d')
         
         sql = """INSERT INTO zones(
-            name, description, creation_date, creation_user
-        ) VALUES(?,?,?,?)"""
+            name
+        ) VALUES(?)"""
         
-        complete_zone = (
-            *zone_data[:2],    # name, description
-            current_time,      # creation_date
-            zone_data[2]       # creation_user
-        )
-        
-        cursor.execute(sql, complete_zone)
+        # Only use the name from zone_data
+        cursor.execute(sql, (zone_data[0],))
         conn.commit()
-        print("Zone added successfully")
         return cursor.lastrowid
     except Error as e:
         print(f"Error adding zone: {e}")
         return None
+
+def get_zone_input():
+    """Get zone details from user"""
+    try:
+        name = input("Enter zone name: ")
+        return (name,)  # Return only the name as a tuple
+    except ValueError:
+        print("Invalid input! Please enter a valid name.")
+        return None
+
+def remove_zone(conn, zone_id):
+    """Delete a zone if it has no active objects"""
+    try:
+        cursor = conn.cursor()
+        
+        # First disable foreign key constraints temporarily
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        
+        # Check if zone exists
+        cursor.execute("SELECT id FROM zones WHERE id = ?", (zone_id,))
+        if not cursor.fetchone():
+            print("Zone not found")
+            return False
+        
+        # Delete the zone
+        cursor.execute("DELETE FROM zones WHERE id = ?", (zone_id,))
+        
+        # Update any objects that were in this zone to zone_id = 1 (default zone)
+        cursor.execute("""
+            UPDATE objects 
+            SET zone_id = 1 
+            WHERE zone_id = ?
+        """, (zone_id,))
+        
+        # Re-enable foreign key constraints
+        cursor.execute("PRAGMA foreign_keys = ON")
+        
+        conn.commit()
+        print("Zone deleted successfully")
+        return True
+        
+    except Error as e:
+        print(f"Error deleting zone: {e}")
+        cursor.execute("PRAGMA foreign_keys = ON")  # Make sure to re-enable foreign keys
+        return False
 
 ## AGREGAR UNA CATEGORIA
 def add_category(conn, category_data):
@@ -426,7 +456,21 @@ def add_category(conn, category_data):
         print(f"Error adding category: {e}")
         return None
 
-
+def list_zone_items(conn, zone_id, zone_name):
+    """List all items in a specific zone"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT o.id, o.name, o.description, o.price, o.quantity, s.name as status
+            FROM objects o
+            JOIN statuses s ON o.status_id = s.id
+            WHERE o.zone_id = ? AND o.deletion_date IS NULL
+            ORDER BY o.id
+        """, (zone_id,))
+        return cursor.fetchall()
+    except Error as e:
+        print(f"Error retrieving items: {e}")
+        return []
 
 def main():
     # Create a database connection
