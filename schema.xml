@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <!-- Define the object type to be reused -->
+    <xs:complexType name="objectType">
+        <xs:sequence>
+            <xs:element name="id" type="xs:integer"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="description" type="xs:string"/>
+            <xs:element name="price" type="xs:decimal"/>
+            <xs:element name="quantity" type="xs:integer"/>
+            <xs:element name="category" type="xs:string"/>
+            <xs:element name="zone" type="xs:string"/>
+            <xs:element name="creation_date" type="xs:date"/>
+            <xs:element name="modification_date" type="xs:date"/>
+            <xs:element name="deletion_date" type="xs:date"/>
+            <xs:element name="status" type="xs:string"/>
+            <xs:element name="creation_user" type="xs:string"/>
+            <xs:element name="modification_user" type="xs:string"/>
+            <xs:element name="deletion_user" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Root element containing all tables -->
+    <xs:element name="database">
+        <xs:complexType>
+            <xs:sequence>
+                <!-- Table 1 -->
+                <xs:element name="Zona de mecanizado">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="object" type="objectType" maxOccurs="unbounded"/>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+                <!-- Table 2 -->
+                <xs:element name="Zona de soldadura">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="object" type="objectType" maxOccurs="unbounded"/>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+                <!-- Table 3 -->
+                <xs:element name="Zona de impresion">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="object" type="objectType" maxOccurs="unbounded"/>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+
+                <!-- Table 4 -->
+                <xs:element name="Zona del laser">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="object" type="objectType" maxOccurs="unbounded"/>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+            <xs:element name="users">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="user" type="userType" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
+
