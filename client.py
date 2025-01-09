@@ -1,6 +1,6 @@
 import socket
 import xml.etree.ElementTree as ET
-
+## CREAR UN OBJETO DE PRUEBA
 def create_sample_object():
     """Create a sample object following the schema"""
     object_xml = """
@@ -23,6 +23,7 @@ def create_sample_object():
     """
     return object_xml
 
+## CONEXION AL SERVIDOR
 def connect_to_server(username, password, xml_data, host='localhost', port=5000):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:

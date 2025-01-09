@@ -13,6 +13,7 @@ ADMIN_PASSWORD_HASH = hashlib.sha256("your_secure_password".encode()).hexdigest(
 # Load and validate XML schema
 SCHEMA_FILE = "schema.xml"
 
+## CARGAR EL ESQUEMA
 def load_schema():
     """Load the XML schema for validation"""
     try:
@@ -24,6 +25,7 @@ def load_schema():
         print(f"Error loading schema: {e}")
         return None
 
+## VALIDAR EL OBJETO
 def validate_object(xml_string, schema):
     """Validate an XML object against the schema"""
     try:
@@ -34,6 +36,7 @@ def validate_object(xml_string, schema):
         print(f"Validation error: {e}")
         return False
 
+## OBTENER LA SUBRED
 def get_subnet():
     """Get the subnet of the server"""
     interfaces = netifaces.interfaces()
@@ -48,6 +51,7 @@ def get_subnet():
                     return (ip, netmask)
     return None
 
+## COMPROBAR SI EL CLIENTE ESTA EN LA MISMA SUBRED
 def check_client_authorization(client_address):
     """Check if client is on the same subnet"""
     server_subnet = get_subnet()
@@ -64,6 +68,13 @@ def check_client_authorization(client_address):
     # Compare network addresses
     return (server_ip_int & netmask_int) == (client_ip_int & netmask_int)
 
+## COMPROBAR LAS CREDENCIALES
+def check_credentials(username, password):
+    """Verify username and password against stored credentials"""
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    return username == ADMIN_USERNAME and password_hash == ADMIN_PASSWORD_HASH
+
+## INICIAR EL SERVIDOR
 def start_server(port=5000):
     schema = load_schema()
     if not schema:
