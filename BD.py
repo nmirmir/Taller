@@ -1,15 +1,23 @@
+"""
+Database Operations Module
+Handles all database interactions for the Inventory Management System.
+Uses SQLite for data storage and management.
+"""
+
 import sqlite3
 from sqlite3 import Error
 from datetime import datetime
 
 
 ## CONEXION A LA BASE DE DATOS
-
 def create_connection():
-    """Create a database connection to a SQLite database
+    """
+    Creates a connection to the SQLite database.
+    If the database doesn't exist, it will be created.
     
     Returns:
-        Connection object or None if connection fails
+        sqlite3.Connection: Database connection object if successful
+        None: If connection fails
     """
     try:
         conn = sqlite3.connect('inventory.db')
@@ -21,7 +29,15 @@ def create_connection():
 
 ## CREACION DE LAS TABLAS
 def create_table(conn):
-    """Create all necessary tables and add default values
+    """
+    Creates all necessary tables in the database if they don't exist.
+    Also adds default values for categories, statuses, and zones.
+    
+    Tables created:
+    1. zones - Locations where items are stored
+    2. categories - Item classifications
+    3. statuses - Possible states of items
+    4. objects - Main inventory items table
     
     Args:
         conn: Database connection object
@@ -32,7 +48,7 @@ def create_table(conn):
         # Enable foreign key support for referential integrity
         cursor.execute("PRAGMA foreign_keys = ON")
         
-        # Create zones table - Stores different areas/locations
+        # Create zones table for storing locations
         create_zones_table = """
         CREATE TABLE IF NOT EXISTS zones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +56,7 @@ def create_table(conn):
         );
         """
         
-        # Create categories table - Object classifications
+        # Create categories table for item classifications
         create_categories_table = """
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +64,7 @@ def create_table(conn):
         );
         """
         
-        # Create statuses table - Current state of objects
+        # Create statuses table for item states
         create_statuses_table = """
         CREATE TABLE IF NOT EXISTS statuses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +72,7 @@ def create_table(conn):
         );
         """
         
-        # Create main objects table with all necessary fields and foreign keys
+        # Create main objects table with all necessary fields
         create_objects_table = """
         CREATE TABLE IF NOT EXISTS objects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,15 +87,15 @@ def create_table(conn):
             modification_user TEXT NOT NULL,
             creation_date DATE NOT NULL,
             modification_date DATE NOT NULL,
-            deletion_date DATE,
-            deletion_user TEXT,
+            deletion_date DATE,             -- Null if not deleted
+            deletion_user TEXT,             -- Null if not deleted
             FOREIGN KEY (category_id) REFERENCES categories(id),
             FOREIGN KEY (zone_id) REFERENCES zones(id),
             FOREIGN KEY (status_id) REFERENCES statuses(id)
         );
         """
         
-        # Execute all create statements in correct order
+        # Execute all create statements
         cursor.execute(create_categories_table)
         cursor.execute(create_statuses_table)
         cursor.execute(create_zones_table)
@@ -89,30 +105,30 @@ def create_table(conn):
         cursor.execute("""
         INSERT OR IGNORE INTO categories (id, name) 
         VALUES 
-            (1, 'Tools'),
-            (2, 'Materials'),
-            (3, 'Consumables'),
-            (4, 'Equipment');
+            (1, 'Tools'),        -- Hand tools, power tools, etc.
+            (2, 'Materials'),    -- Raw materials, components
+            (3, 'Consumables'),  -- Items that get used up
+            (4, 'Equipment');    -- Larger machinery or devices
         """)
 
         # Insert default statuses if they don't exist
         cursor.execute("""
         INSERT OR IGNORE INTO statuses (id, name) 
         VALUES 
-            (1, 'Active'),
-            (2, 'Maintenance'),
-            (3, 'Out of Service'),
-            (4, 'Reserved');
+            (1, 'Active'),       -- In use/available
+            (2, 'Maintenance'),  -- Under repair/maintenance
+            (3, 'Out of Service'), -- Not usable
+            (4, 'Reserved');     -- Reserved for specific use
         """)
 
         # Insert default zones if they don't exist
         cursor.execute("""
         INSERT OR IGNORE INTO zones (id, name) 
         VALUES 
-            (1, 'Zona de Mecanizado'),
-            (2, 'Zona de Soldadura'),
-            (3, 'Zona de Impresion'),
-            (4, 'Zona del Laser');
+            (1, 'Zona de Mecanizado'),  -- Machining area
+            (2, 'Zona de Soldadura'),   -- Welding area
+            (3, 'Zona de Impresion'),   -- Printing area
+            (4, 'Zona del Laser');      -- Laser area
         """)
 
         conn.commit()
@@ -123,19 +139,24 @@ def create_table(conn):
 
 ## INSERTAR UN OBJETO
 def add_object(conn, object_data):
-    """Add a new object to the database
+    """
+    Adds a new object to the inventory.
     
     Args:
         conn: Database connection object
-        object_data: Tuple containing object details
-        
+        object_data: Tuple containing (name, description, price, quantity,
+                    category_id, zone_id, status_id, creation_user,
+                    modification_user)
+    
     Returns:
-        int: ID of the newly created object, or None if failed
+        int: ID of newly created object if successful
+        None: If operation fails
     """
     try:
         cursor = conn.cursor()
         current_time = datetime.now().strftime('%Y-%m-%d')
         
+        # SQL for inserting new object with all fields
         sql = """INSERT INTO objects(
             name, description, price, quantity, 
             category_id, zone_id, status_id,
@@ -144,7 +165,7 @@ def add_object(conn, object_data):
             deletion_date, deletion_user
         ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"""
         
-        # Add creation_date, modification_date, and NULL for deletion fields
+        # Complete the object data with dates and null deletion fields
         complete_object = (
             *object_data,      # Original data
             current_time,      # creation_date
@@ -255,6 +276,7 @@ def update_object(conn, object_id, update_data, modification_user):
         print(f"Error updating object: {e}")
         return False
 
+## LISTAR TODAS LAS ZONAS
 def list_zones(conn):
     """List all zones"""
     cursor = conn.cursor()
@@ -296,16 +318,19 @@ def get_all_users(conn):
 
 ## OBTENER TODOS LOS OBJETOS
 def get_all_objects(conn):
-    """Retrieve all non-deleted objects with their status
+    """
+    Retrieves all non-deleted objects from database.
     
     Args:
         conn: Database connection object
-        
+    
     Returns:
         list: List of tuples containing object details
+        Empty list: If no objects found or error occurs
     """
     try:
         cursor = conn.cursor()
+        # Select only non-deleted objects and join with status
         cursor.execute("""
             SELECT o.id, o.name, o.description, o.price, o.quantity, s.name as status
             FROM objects o
@@ -316,7 +341,6 @@ def get_all_objects(conn):
         objects = cursor.fetchall()
         if not objects:
             print("No objects found")
-            return []
         return objects
     except Error as e:
         print(f"Error getting objects: {e}")
@@ -386,6 +410,7 @@ def add_zone(conn, zone_data):
         print(f"Error adding zone: {e}")
         return None
 
+## OBTENER LOS DATOS DE LA ZONA
 def get_zone_input():
     """Get zone details from user"""
     try:
@@ -395,6 +420,7 @@ def get_zone_input():
         print("Invalid input! Please enter a valid name.")
         return None
 
+## ELIMINAR UNA ZONA
 def remove_zone(conn, zone_id):
     """Delete a zone if it has no active objects"""
     try:
@@ -456,6 +482,7 @@ def add_category(conn, category_data):
         print(f"Error adding category: {e}")
         return None
 
+## LISTAR LOS ITEMS DE UNA ZONA
 def list_zone_items(conn, zone_id, zone_name):
     """List all items in a specific zone"""
     try:
@@ -472,6 +499,7 @@ def list_zone_items(conn, zone_id, zone_name):
         print(f"Error retrieving items: {e}")
         return []
 
+## MAIN
 def main():
     # Create a database connection
     conn = create_connection()
