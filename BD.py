@@ -104,66 +104,35 @@ def create_table(conn):
         print(f"Error creating tables: {e}")
 
 ## INSERTAR UN OBJETO
-def add_object(conn, object_data):
-    """
-    Adds a new object to the inventory, reusing available IDs
-    
-    Args:
-        conn: Database connection object
-        object_data: Tuple containing object details
-    
-    Returns:
-        int: ID of newly created object
-        None: If operation fails
-    """
+def add_object(conn, data):
+    """Add a new object to the database"""
     try:
         cursor = conn.cursor()
-        current_time = datetime.now().strftime('%Y-%m-%d')
-        
-        # Check if table is empty
-        cursor.execute("SELECT COUNT(*) FROM objects")
-        if cursor.fetchone()[0] == 0:
-            next_id = 1
-        else:
-            # Find gaps in the sequence
-            cursor.execute("""
-                SELECT MIN(t1.id + 1) as next_id
-                FROM objects t1
-                LEFT JOIN objects t2 ON t1.id + 1 = t2.id
-                WHERE t2.id IS NULL
-            """)
-            result = cursor.fetchone()[0]
-            if result is None:
-                # If no gaps, use the next number after the highest ID
-                cursor.execute("SELECT MAX(id) + 1 FROM objects")
-                next_id = cursor.fetchone()[0]
-            else:
-                next_id = result
-        
-        # SQL for inserting new object with specific ID
-        sql = """INSERT INTO objects(
-            id, name, description, price, quantity, 
-            category_id, zone_id, status_id,
-            creation_user, modification_user,
-            creation_date, modification_date,
-            deletion_date, deletion_user
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-        
-        complete_object = (
-            next_id,           # Specific ID
-            *object_data,      # Original data
-            current_time,      # creation_date
-            current_time,      # modification_date
-            None,             # deletion_date
-            None              # deletion_user
-        )
-        
-        cursor.execute(sql, complete_object)
+        cursor.execute('''
+            INSERT INTO objects (
+                name, 
+                description, 
+                zone_id, 
+                category_id, 
+                price, 
+                quantity, 
+                status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['name'],
+            data.get('description', ''),
+            data['zone_id'],
+            data['category_id'],
+            data['price'],
+            data['quantity'],
+            data['status']
+        ))
         conn.commit()
-        return next_id
-    except Error as e:
-        print(f"Error adding object: {e}")
-        return None
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Database error in add_object: {e}")
+        conn.rollback()
+        raise Exception(f"Database error: {str(e)}")
 ## ELIMINAR UN OBJETO
 def delete_object(conn, object_id, deletion_user):
     """
@@ -851,27 +820,6 @@ def get_objects(conn):
     except Exception as e:
         print(f"Error in get_objects: {e}")
         raise
-
-def add_object(conn, data):
-    """Add a new object to the database"""
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO objects (name, description, price, quantity, status)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (
-            data['name'],
-            data.get('description', ''),
-            data['price'],
-            data['quantity'],
-            data['status']
-        ))
-        conn.commit()
-        return cursor.lastrowid
-    except sqlite3.Error as e:
-        print(f"Database error in add_object: {e}")
-        conn.rollback()
-        raise Exception(f"Database error: {str(e)}")
 
 if __name__ == '__main__':
     main()

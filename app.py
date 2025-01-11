@@ -41,28 +41,35 @@ def objects_endpoint():
             if not data:
                 return jsonify({"error": "No data provided"}), 400
                 
-            required_fields = ['name', 'price', 'quantity', 'status']
+            required_fields = ['name', 'price', 'quantity', 'status', 'zone_id', 'category_id']
             for field in required_fields:
                 if field not in data:
                     return jsonify({"error": f"Missing required field: {field}"}), 400
-                    
+                
+            # Validate that zone_id and category_id are integers
+            try:
+                data['zone_id'] = int(data['zone_id'])
+                data['category_id'] = int(data['category_id'])
+            except (ValueError, TypeError):
+                return jsonify({"error": "zone_id and category_id must be valid integers"}), 400
+                
             object_id = add_object(db, data)
             return jsonify({
                 "id": object_id,
                 "name": data['name'],
                 "description": data.get('description', ''),
+                "zone_id": data['zone_id'],
+                "category_id": data['category_id'],
                 "price": data['price'],
                 "quantity": data['quantity'],
                 "status": data['status']
             }), 201
         else:
-            print("GET request received for objects")  # Debug print
             objects = get_objects(db)
-            print(f"Returning objects: {objects}")  # Debug print
             return jsonify(objects)
             
     except Exception as e:
-        print(f"Error in objects endpoint: {e}")  # Debug print
+        print(f"Error in objects endpoint: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/objects/<int:object_id>', methods=['DELETE'])
