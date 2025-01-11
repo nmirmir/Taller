@@ -27,471 +27,144 @@ from BD import (
     delete_status_objects,
     delete_all_objects
 )
+import sqlite3
+from datetime import datetime
 
-def print_menu():
-    """
-    Displays the main menu of the application.
-    Shows all available operations that user can perform.
-    """
-    print("\n=== Database Management System ===")
-    print("1. Add new object")      # Create new inventory item
-    print("2. Update object")       # Modify existing item
-    print("3. Delete object")       # Mark item as deleted
-    print("4. List all objects")    # Show all active items
-    print("5. List all categories") # Show item classifications
-    print("6. List items by zone")  # Show items in specific location
-    print("7. Add category")        # Create new classification
-    print("8. Add zone")           # Create new location
-    print("9. List all zones")     # Show all locations
-    print("10. Remove zone")       # Delete empty location
-    print("11. View History")    # Add this line
-    print("\n=== Bulk Delete Operations ===")
-    print("12. Delete all objects in a zone")
-    print("13. Delete all objects in a category")
-    print("14. Delete all objects with status")
-    print("15. Delete ALL objects")
-    print("0. Exit")               # Close program
-    print("================================")
+def create_connection():
+    return sqlite3.connect('inventory.db')
 
-def get_object_input():
-    """
-    Collects all necessary information to create a new inventory item.
-    
-    Process:
-    1. Shows available zones for selection
-    2. Collects basic item information (name, description, etc.)
-    3. Shows available categories for selection
-    4. Shows available statuses for selection
-    5. Gets username for tracking
-    
-    Returns:
-        tuple: Contains all object information if valid
-        None: If any input is invalid
-    """
+def get_zones():
+    conn = None
     try:
-        # First, show and select zone
-        print("\nAvailable zones:")
-        zones = get_all_zones(conn)
-        for zone in zones:
-            print(f"ID: {zone[0]} - Name: {zone[1]}")
-        
-        # Collect basic object information
-        zone_id = int(input("\nEnter zone ID: "))
-        name = input("Enter object name: ")
-        description = input("Enter description: ")
-        price = float(input("Enter price: "))
-        quantity = int(input("Enter quantity: "))
-        
-        # Show and select category
-        print("\nAvailable categories:")
-        categories = get_all_categories(conn)
-        for category in categories:
-            print(f"ID: {category[0]} - {category[1]}")
-        category_id = int(input("\nEnter category ID: "))
-        
-        # Show and select status
-        print("\nAvailable statuses:")
-        statuses = get_all_statuses(conn)
-        for status in statuses:
-            print(f"ID: {status[0]} - {status[1]}")
-        status_id = int(input("\nEnter status ID: "))
-        
-        # Get user information for tracking
-        user = input("Enter your username: ")
-        
-        # Return all collected information as a tuple
-        return (name, description, price, quantity, 
-                category_id, zone_id, status_id, 
-                user, user)  # user appears twice for creation and modification
-    except ValueError:
-        print("Invalid input! Please enter correct data types.")
-        return None
-
-def get_history_input():
-    """
-    Collects information for adding an entry to the history table.
-    Shows available action types to ensure consistency.
-    """
-    try:
-        object_id = int(input("Enter object ID: "))
-        
-        print("\nAvailable action types:")
-        print("1. CREATE")
-        print("2. UPDATE")
-        print("3. DELETE")
-        
-        action_choice = input("Select action type (1-3): ")
-        action_types = {
-            '1': 'CREATE',
-            '2': 'UPDATE',
-            '3': 'DELETE'
-        }
-        
-        if action_choice not in action_types:
-            print("Invalid action type!")
-            return None
-            
-        return (object_id, action_types[action_choice])
-    except ValueError:
-        print("Invalid input! Please enter a valid object ID.")
-        return None
-
-def get_update_input():
-    """
-    Collects information for updating an existing object.
-    
-    Allows updating:
-    - Price only
-    - Quantity only
-    - Both price and quantity
-    
-    Returns:
-        dict: Contains fields to update and modification user
-        None: If input is invalid
-    """
-    updates = {}
-    try:
-        # Show update options
-        print("\nWhat would you like to update?")
-        print("1. Price")
-        print("2. Quantity")
-        print("3. Both")
-        choice = input("Enter choice (1-3): ")
-        
-        # Collect new values based on choice
-        if choice in ['1', '3']:
-            updates['price'] = float(input("Enter new price: "))
-        if choice in ['2', '3']:
-            updates['quantity'] = int(input("Enter new quantity: "))
-            
-        # Get user information for tracking
-        updates['modification_user'] = input("Enter your username: ")
-        return updates
-    except ValueError:
-        print("Invalid input! Please enter correct data types.")
-        return None
-
-def get_category_input():
-    """Get category details from user"""
-    try:
-        name = input("Enter category name: ")
-        description = input("Enter category description: ")
-        user = input("Enter your username: ")
-        
-        return (name, description, user)
-    except ValueError:
-        print("Invalid input! Please enter correct data types.")
-        return None
-
-def get_zone_input():
-    """Get zone details from user"""
-    try:
-        name = input("Enter zone name: ")
-        return (name,)  # Return only the name
-    except ValueError:
-        print("Invalid input! Please enter a valid name.")
-        return None
-
-def display_objects(objects):
-    """Display all objects in a formatted way"""
-    if not objects:
-        return  # Don't print anything, let main handle empty case
-        
-    for obj in objects:
-        print(f"\nID: {obj[0]}")
-        print(f"Name: {obj[1]}")
-        print(f"Description: {obj[2]}")
-        print(f"Price: ${obj[3]}")
-        print(f"Quantity: {obj[4]}")
-        print(f"Status: {obj[5]}")
-        print("-" * 30)
-
-def get_zone_id(conn, zone_name):
-    """Get the id of a zone by name"""
-    zone = get_zone_by_id(conn, zone_name)
-    return zone[0]
-
-def list_zone_items(conn, zone_id, zone_name):
-    """List all items in a specific zone"""
-    try:
+        conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT o.id, o.name, o.description, o.price, o.quantity, s.name as status
-            FROM objects o
-            JOIN statuses s ON o.status_id = s.id
-            WHERE o.zone_id = ? AND o.deletion_date IS NULL
-            ORDER BY o.id
-        """, (zone_id,))
-        return cursor.fetchall()
-    except Error as e:
-        print(f"Error retrieving items: {e}")
+        
+        cursor.execute('SELECT id, name FROM zones')
+        
+        zones = []
+        for row in cursor.fetchall():
+            zones.append({
+                'id': row[0],
+                'name': row[1]
+            })
+            
+        return zones
+        
+    except Exception as e:
+        print(f"Error in get_zones: {e}")
         return []
+    finally:
+        if conn:
+            conn.close()
 
-def display_history(history_items):
-    """Display all history entries with all fields"""
-    if not history_items:
-        print("\nNo history records found")
-        return
-        
-    for item in history_items:
-        print("\n=== Change Summary ===")
-        print(f"Zone: {item[0] if item[0] else 'Not specified'}")
-        print(f"Action Type: {item[1] if item[1] else 'Not specified'}")
-        print(f"Field Modified: {item[2] if item[2] else 'Not specified'}")
-        print(f"Number of Changes: {item[3] if item[3] else '0'}")
-        print(f"Objects Modified: {item[4] if item[4] else 'None'}")
-        print(f"Date: {item[5] if item[5] else 'Not specified'}")
-        print(f"User: {item[6] if item[6] else 'Not specified'}")
-        print("-" * 30)
-
-def main():
-    """
-    Main program loop.
-    
-    Process:
-    1. Creates database connection
-    2. Initializes tables if needed
-    3. Shows menu and processes user choices until exit
-    4. Closes database connection on exit
-    """
-    global conn
-    
-    # Initialize database
+def init_db():
     conn = create_connection()
-    if conn is None:
-        print("Error! Cannot create database connection.")
-        return
-
-    # Create necessary tables
-    create_table(conn)
+    cursor = conn.cursor()
     
-    # Main program loop
-    while True:
-        print_menu()
-        choice = input("Enter your choice (0-15): ")
-        
-        # Process user choice
-        if choice == '0':
-            break
-            
-        elif choice == '1':
-            # Add new object process
-            print("\n--- Adding new object ---")
-            object_data = get_object_input()
-            if object_data:
-                object_id = add_object(conn, object_data)
-                if object_id:
-                    print(f"Successfully added object with ID: {object_id}")
-        
-        elif choice == '2':
-            print("\n--- Updating object ---")
-            try:
-                object_id = int(input("Enter object ID to update: "))
-                updates = get_update_input()
-                if updates:
-                    modification_user = updates.pop('modification_user')  # Remove and get modification_user
-                    update_object(conn, object_id, updates, modification_user)
-                    print("Object updated successfully.")
-            except ValueError:
-                print("Invalid input! Please enter a valid object ID.")
-            
-        elif choice == '3':
-            print("\n--- Deleting object ---")
-            # First show all objects
-            print("\nAvailable objects:")
-            objects = get_all_objects(conn)
-            for obj in objects:
-                print(f"\nID: {obj[0]}")
-                print(f"Name: {obj[1]}")
-                print(f"Description: {obj[2]}")
-                print(f"Price: ${obj[3]}")
-                print(f"Quantity: {obj[4]}")
-                print("-" * 30)
-            
-            try:
-                object_id = int(input("\nEnter object ID to delete: "))
-                user = input("Enter your username: ")
-                if delete_object(conn, object_id, user):
-                    print("Object deleted successfully.")
-                else:
-                    print("Failed to delete object.")
-            except ValueError:
-                print("Invalid input! Please enter a valid object ID.")
-            
-        elif choice == '4':
-            print("\n--- Listing all objects ---")
-            objects = get_all_objects(conn)
-            if objects:
-                display_objects(objects)
-            else:
-                print("No objects found")
-            
-        elif choice == '5':
-            print("\n--- Listing all categories ---")
-            categories = get_all_categories(conn)
-            for category in categories:
-                print(f"ID: {category[0]}, Name: {category[1]}")
-            
-        elif choice == '6':
-            print("\n--- List items by zone ---")
-            zones = get_all_zones(conn)
-            for zone in zones:
-                print(f"{zone[0]}. {zone[1]}")
-            try:
-                zone_choice = int(input("\nSelect zone ID: "))
-                zone_exists = False
-                zone_name = ""
-                for zone in zones:
-                    if zone[0] == zone_choice:
-                        zone_exists = True
-                        zone_name = zone[1]
-                        break
-                
-                if zone_exists:
-                    print(f"\n=== Items in {zone_name} ===")
-                    items = list_zone_items(conn, zone_choice, zone_name)
-                    display_objects(items)
-                else:
-                    print("Invalid zone selection!")
-            except ValueError:
-                print("Invalid input! Please enter a number.")
-            
-        elif choice == '7':
-            print("\n--- Adding new category ---")
-            category_data = get_category_input()
-            if category_data:
-                add_category(conn, category_data)
-                print("Category added successfully.")
-            
-        elif choice == '8':
-            print("\n--- Adding new zone ---")
-            zone_data = get_zone_input()
-            if zone_data:
-                zone_id = add_zone(conn, zone_data)
-                if zone_id:
-                    print(f"Zone added successfully with ID: {zone_id}")
-                else:
-                    print("Failed to add zone")
-            
-        elif choice == '9':
-            print("\n--- Listing all zones ---")
-            zones = get_all_zones(conn)
-            if zones:
-                print("\nAvailable Zones:")
-                print("-" * 40)
-                for zone in zones:
-                    print(f"ID: {zone[0]} - Name: {zone[1]}")
-                    print("-" * 40)
-            else:
-                print("No zones found")
-            
-            # Remove the extra input prompt
-            # input("\nPress Enter to continue...")
-        
-        elif choice == '10':
-            print("\n--- Removing zone ---")
-            # Show available zones first
-            zones = get_all_zones(conn)
-            if zones:
-                print("\nAvailable Zones:")
-                for zone in zones:
-                    print(f"ID: {zone[0]} - Name: {zone[1]}")
-                
-                try:
-                    zone_id = int(input("\nEnter zone ID to remove: "))
-                    remove_zone(conn, zone_id)
-                except ValueError:
-                    print("Invalid input! Please enter a valid zone ID.")
-            else:
-                print("No zones available to remove.")
-            
-        elif choice == '11':
-            print("\n--- Viewing History ---")
-            history = get_history_summary(conn)
-            display_history(history)
-        
-        elif choice == '12':
-            print("\n--- Delete All Objects in Zone ---")
-            zones = get_all_zones(conn)
-            if zones:
-                print("\nAvailable Zones:")
-                for zone in zones:
-                    print(f"ID: {zone[0]} - Name: {zone[1]}")
-                try:
-                    zone_id = int(input("\nEnter zone ID: "))
-                    password = input("Enter admin password: ")
-                    if delete_zone_objects(conn, zone_id, password):
-                        print("Zone objects deleted successfully")
-                except ValueError:
-                    print("Invalid zone ID!")
-            else:
-                print("No zones available")
-
-        elif choice == '13':
-            print("\n--- Delete All Objects in Category ---")
-            categories = get_all_categories(conn)
-            if categories:
-                print("\nAvailable Categories:")
-                for category in categories:
-                    print(f"ID: {category[0]} - Name: {category[1]}")
-                try:
-                    category_id = int(input("\nEnter category ID: "))
-                    password = input("Enter admin password: ")
-                    if delete_category_objects(conn, category_id, password):
-                        print("Category objects deleted successfully")
-                except ValueError:
-                    print("Invalid category ID!")
-            else:
-                print("No categories available")
-
-        elif choice == '14':
-            print("\n--- Delete All Objects with Status ---")
-            statuses = get_all_statuses(conn)
-            if statuses:
-                print("\nAvailable Statuses:")
-                for status in statuses:
-                    print(f"ID: {status[0]} - Name: {status[1]}")
-                try:
-                    status_id = int(input("\nEnter status ID: "))
-                    password = input("Enter admin password: ")
-                    if delete_status_objects(conn, status_id, password):
-                        print("Status objects deleted successfully")
-                except ValueError:
-                    print("Invalid status ID!")
-            else:
-                print("No statuses available")
-
-        elif choice == '15':
-            print("\n--- Delete ALL Objects ---")
-            print("WARNING: This will delete all objects in the database!")
-            password = input("Enter admin password: ")
-            if delete_all_objects(conn, password):
-                print("All objects deleted successfully")
-
-        else:
-            print("Invalid choice! Please try again.")
-        
-        # Add history entry only for specific actions that modify the database
-        if choice in ['1', '2', '3']:  # Only for add, update, delete object
-            history_data = get_history_input()
-            if history_data:
-                object_id, action_type = history_data  # Unpack the tuple
-                add_history(conn, 
-                        zone_id=1,  # Default zone or get from object
-                        object_id=object_id,
-                        action_type=action_type,
-                        modification_user='admin')  # Or get from previous input
-                print("History entry added successfully.")
-        
-
-        # Wait for user acknowledgment before showing menu again
-        input("\nPress Enter to continue...")
+    # Create tables if they don't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS zones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )
+    ''')
     
-    # Clean up and exit
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS objects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            zone_id INTEGER,
+            price REAL DEFAULT 0,
+            quantity INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'Available',
+            FOREIGN KEY (zone_id) REFERENCES zones (id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            object_id INTEGER,
+            zone_id INTEGER,
+            action_type TEXT,
+            modification_date DATETIME,
+            comment TEXT,
+            FOREIGN KEY (object_id) REFERENCES objects (id),
+            FOREIGN KEY (zone_id) REFERENCES zones (id)
+        )
+    ''')
+    
+    # Insert a default zone if none exists
+    cursor.execute('SELECT COUNT(*) FROM zones')
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO zones (name) VALUES ('Default Zone')")
+    
+    conn.commit()
     conn.close()
-    print("\nDatabase connection closed.")
 
-# Program entry point
-if __name__ == "__main__":
-    conn = None  # Global database connection
-    main() 
+def add_object(name, description, zone_id, price, quantity, status, comment=None):
+    conn = None
+    try:
+        conn = create_connection()
+        cursor = conn.cursor()
+        
+        # Insert object
+        cursor.execute('''
+            INSERT INTO objects (name, description, zone_id, price, quantity, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (name, description, zone_id, price, quantity, status))
+        
+        object_id = cursor.lastrowid
+        
+        # Add history entry
+        cursor.execute('''
+            INSERT INTO history (object_id, zone_id, action_type, modification_date, comment)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (object_id, zone_id, 'CREATE', datetime.now(), comment))
+        
+        conn.commit()
+        return object_id
+        
+    except Exception as e:
+        print(f"Error in add_object: {e}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def get_objects():
+    conn = None
+    try:
+        conn = create_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT o.*, z.name as zone_name 
+            FROM objects o
+            LEFT JOIN zones z ON o.zone_id = z.id
+        ''')
+        
+        objects = []
+        for row in cursor.fetchall():
+            objects.append({
+                'id': row[0],
+                'name': row[1],
+                'description': row[2],
+                'zone_id': row[3],
+                'price': row[4],
+                'quantity': row[5],
+                'status': row[6],
+                'zone_name': row[7] if len(row) > 7 else ''
+            })
+            
+        return objects
+        
+    except Exception as e:
+        print(f"Error in get_objects: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close() 

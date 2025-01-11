@@ -28,6 +28,14 @@ CREATE TABLE objects (
     FOREIGN KEY (category_id) REFERENCES categories (id)
 );
 
+CREATE TABLE IF NOT EXISTS action_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_type TEXT NOT NULL,
+    object_id INTEGER NOT NULL,
+    comment TEXT,
+    creation_date DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert default categories
 INSERT INTO categories (name) VALUES 
     ('Tools'),

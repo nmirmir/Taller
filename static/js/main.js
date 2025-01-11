@@ -3,6 +3,10 @@ let zones = [];
 let categories = [];
 let statuses = [];
 
+// Cache for API data
+let zonesCache = null;
+let objectsCache = null;
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', async function() {
     try {
@@ -44,29 +48,20 @@ async function fetchAPI(endpoint, method = 'GET', data = null) {
 // Data Loading Functions
 async function loadObjects() {
     try {
-        console.log('Loading objects...'); // Debug log
         const response = await fetch('/api/objects');
-        console.log('Response received:', response); // Debug log
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
+        if (!response.ok) throw new Error('Failed to fetch objects');
         const objects = await response.json();
-        console.log('Objects loaded:', objects); // Debug log
         
         const tableBody = document.querySelector('#objectsTable tbody');
         if (!tableBody) {
-            console.error('Objects table body not found');
+            console.error('Table body not found');
             return;
         }
         
         tableBody.innerHTML = '';
         
         if (objects.length === 0) {
-            const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="7" class="text-center">No objects found</td>';
-            tableBody.appendChild(row);
+            tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No objects found</td></tr>';
             return;
         }
         
@@ -76,11 +71,16 @@ async function loadObjects() {
                 <td>${obj.id}</td>
                 <td>${obj.name}</td>
                 <td>${obj.description || ''}</td>
-                <td>${obj.price}</td>
-                <td>${obj.quantity}</td>
-                <td>${obj.status}</td>
+                <td>${obj.zone_name || ''}</td>
+                <td>${obj.category || ''}</td>
+                <td>${obj.price || 0}</td>
+                <td>${obj.quantity || 0}</td>
+                <td>${obj.status || 'Available'}</td>
                 <td>
-                    <button class="btn btn-danger" onclick="deleteObject(${obj.id})">
+                    <button class="btn btn-primary btn-sm" onclick="editObject(${obj.id})">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteObject(${obj.id})">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                 </td>
@@ -95,39 +95,23 @@ async function loadObjects() {
 
 async function loadZones() {
     try {
-        console.log('Loading zones...'); // Debug log
         const response = await fetch('/api/zones');
-        console.log('Zones response:', response); // Debug log
-        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error('Failed to fetch zones');
         }
-        
         const zones = await response.json();
-        console.log('Zones loaded:', zones); // Debug log
         
         const tableBody = document.querySelector('#zonesTable tbody');
-        if (!tableBody) {
-            console.error('Zones table body not found');
-            return;
-        }
+        if (!tableBody) return;
         
         tableBody.innerHTML = '';
-        
-        if (zones.length === 0) {
-            const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="3" class="text-center">No zones found</td>';
-            tableBody.appendChild(row);
-            return;
-        }
-        
         zones.forEach(zone => {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${zone.id}</td>
                 <td>${zone.name}</td>
                 <td>
-                    <button class="btn btn-danger" onclick="deleteZone(${zone.id})">
+                    <button class="btn btn-danger btn-sm" onclick="deleteZone(${zone.id})">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                 </td>
@@ -136,7 +120,7 @@ async function loadZones() {
         });
     } catch (error) {
         console.error('Error loading zones:', error);
-        showAlert('Error loading zones: ' + error.message, 'danger');
+        showAlert('Error loading zones', 'danger');
     }
 }
 
@@ -319,42 +303,71 @@ function showBulkDeleteModal(type) {
 }
 
 // Action Functions
-async function addObject(event) {
-    event.preventDefault();
-    const form = event.target;
-    
-    const formData = {
-        name: form.name.value.trim(),
-        description: form.description.value.trim(),
-        zone_id: parseInt(form.zone_id.value),
-        category_id: parseInt(form.category_id.value),
-        price: parseFloat(form.price.value),
-        quantity: parseInt(form.quantity.value),
-        status: form.status.value
-    };
-
+async function addObject() {
     try {
-        const response = await fetch('/api/objects', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
+        const zonesResponse = await fetch('/api/zones');
+        if (!zonesResponse.ok) throw new Error('Failed to fetch zones');
+        const zones = await zonesResponse.json();
+        
+        const { value: formValues } = await Swal.fire({
+            title: 'Add New Object',
+            html: `
+                <input id="name" class="swal2-input" placeholder="Name">
+                <input id="description" class="swal2-input" placeholder="Description">
+                <select id="zone" class="swal2-input">
+                    <option value="">Select Zone</option>
+                    ${zones.map(zone => `<option value="${zone.id}">${zone.name}</option>`).join('')}
+                </select>
+                <input id="price" type="number" step="0.01" class="swal2-input" placeholder="Price">
+                <input id="quantity" type="number" class="swal2-input" placeholder="Quantity">
+                <select id="status" class="swal2-input">
+                    <option value="Available">Available</option>
+                    <option value="In Use">In Use</option>
+                    <option value="Maintenance">Maintenance</option>
+                </select>
+                <textarea id="comment" class="swal2-textarea" placeholder="Add a comment (optional)"></textarea>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            preConfirm: () => {
+                const name = document.getElementById('name').value;
+                if (!name) {
+                    Swal.showValidationMessage('Please enter a name');
+                    return false;
+                }
+                
+                return {
+                    name: name,
+                    description: document.getElementById('description').value,
+                    zone_id: document.getElementById('zone').value,
+                    price: document.getElementById('price').value || 0,
+                    quantity: document.getElementById('quantity').value || 0,
+                    status: document.getElementById('status').value || 'Available',
+                    comment: document.getElementById('comment').value
+                };
+            }
         });
 
-        if (!response.ok) {
-            const result = await response.json();
-            throw new Error(result.error || 'Failed to add object');
-        }
+        if (formValues) {
+            const response = await fetch('/api/objects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formValues)
+            });
 
-        await loadObjects();
-        const modal = bootstrap.Modal.getInstance(document.getElementById('addObjectModal'));
-        modal.hide();
-        form.reset();
-        showAlert('Object added successfully', 'success');
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to add object');
+            }
+
+            await loadObjects();
+            showAlert('Object added successfully', 'success');
+        }
     } catch (error) {
         console.error('Error:', error);
-        showAlert('Error adding object: ' + error.message, 'danger');
+        showAlert('Error: ' + error.message, 'danger');
     }
 }
 
@@ -364,18 +377,59 @@ async function deleteObject(objectId) {
     }
 
     try {
-        const response = await fetch(`/api/objects/${objectId}`, {
+        // First delete the object
+        const deleteResponse = await fetch(`/api/objects/${objectId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ deletion_user: 'web_user' })
+            }
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (!deleteResponse.ok) {
+            throw new Error(`HTTP error! status: ${deleteResponse.status}`);
         }
 
+        // After successful deletion, ask for comment
+        const { isConfirmed: wantsToComment } = await Swal.fire({
+            title: 'Add a Comment?',
+            text: 'Would you like to add a comment about this deletion?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Yes',
+            cancelButtonText: 'No'
+        });
+
+        if (wantsToComment) {
+            const { value: comment } = await Swal.fire({
+                title: 'Enter Comment',
+                input: 'textarea',
+                inputLabel: 'Your comment',
+                inputPlaceholder: 'Type your comment here...',
+                showCancelButton: true,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Please enter a comment';
+                    }
+                }
+            });
+
+            if (comment) {
+                // Add to history with comment
+                await fetch('/api/history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        object_id: objectId,
+                        action_type: 'DELETE',
+                        comment: comment
+                    })
+                });
+            }
+        }
+
+        clearCache();
         await loadObjects();
         showAlert('Object deleted successfully', 'success');
     } catch (error) {
@@ -386,17 +440,60 @@ async function deleteObject(objectId) {
 
 // Function to delete a zone
 async function deleteZone(zoneId) {
-    if (!confirm('Are you sure you want to delete this zone? This cannot be undone.')) {
-        return;
-    }
-
     try {
+        if (!confirm('Are you sure you want to delete this zone?')) {
+            return;
+        }
+
         const response = await fetch(`/api/zones/${zoneId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error('Failed to delete zone');
+        }
+
+        // Ask for action type
+        const actionTypeResult = await Swal.fire({
+            title: 'Select Action Type',
+            html: `
+                <div style="text-align: left; margin: 20px;">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="actionType" id="deleteAction" value="DELETE">
+                        <label class="form-check-label" for="deleteAction">
+                            Delete
+                        </label>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Continue',
+            preConfirm: () => {
+                const selected = document.querySelector('input[name="actionType"]:checked');
+                if (!selected) {
+                    Swal.showValidationMessage('Please select an action type');
+                    return false;
+                }
+                return selected.value;
+            }
+        });
+
+        if (actionTypeResult.isConfirmed) {
+            // Add to history
+            await fetch('/api/history', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    zone_id: zoneId,
+                    action_type: 'DELETE',
+                    comment: null
+                })
+            });
         }
 
         await loadZones();
@@ -413,14 +510,9 @@ function showAlert(message, type) {
     alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
     alertDiv.innerHTML = `
         ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
-    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.nav-tabs'));
-    
-    // Auto-dismiss after 3 seconds
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 3000);
+    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
 }
 
 function populateDropdowns() {
@@ -461,13 +553,8 @@ function showAddZoneModal() {
 // Function to add a new zone
 async function addZone(event) {
     event.preventDefault();
-    
-    const zoneName = document.querySelector('#addZoneModal input[name="zoneName"]').value.trim();
-    
-    if (!zoneName) {
-        showAlert('Zone name cannot be empty', 'danger');
-        return;
-    }
+    const form = event.target;
+    const zoneName = form.zoneName.value.trim();
 
     try {
         const response = await fetch('/api/zones', {
@@ -475,35 +562,48 @@ async function addZone(event) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                name: zoneName
-            })
+            body: JSON.stringify({ name: zoneName })
         });
 
-        // First check if the response is ok
         if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage;
-            try {
-                const errorJson = JSON.parse(errorText);
-                errorMessage = errorJson.error;
-            } catch (e) {
-                errorMessage = errorText;
-            }
-            throw new Error(errorMessage || 'Failed to add zone');
+            throw new Error('Failed to add zone');
         }
 
-        // Only try to parse JSON if response was ok
         const result = await response.json();
         
-        // Refresh zones list
-        await loadZones();
-        
-        // Close modal and reset form
+        // Ask for action type
+        const actionTypeResult = await Swal.fire({
+            title: 'Select Action Type',
+            html: `
+                <div style="text-align: left; margin: 20px;">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="actionType" id="createAction" value="CREATE">
+                        <label class="form-check-label" for="createAction">
+                            Create
+                        </label>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Continue',
+            preConfirm: () => {
+                const selected = document.querySelector('input[name="actionType"]:checked');
+                if (!selected) {
+                    Swal.showValidationMessage('Please select an action type');
+                    return false;
+                }
+                return selected.value;
+            }
+        });
+
+        if (actionTypeResult.isConfirmed) {
+            await addHistoryEntry(result.id, actionTypeResult.value);
+        }
+
+        form.reset();
         const modal = bootstrap.Modal.getInstance(document.getElementById('addZoneModal'));
         modal.hide();
-        document.querySelector('#addZoneModal form').reset();
-        
+        await loadZones();
         showAlert('Zone added successfully', 'success');
     } catch (error) {
         console.error('Error:', error);
@@ -585,28 +685,49 @@ async function updateObject(event) {
     }
 }
 
-// Add event listener for tab changes
-document.addEventListener('DOMContentLoaded', function() {
-    addZoneModalHtml();  // Add the modal HTML
-    loadObjects();
-    loadZones();
+// Tab handling
+document.addEventListener('DOMContentLoaded', () => {
+    // Show Objects tab by default
+    document.querySelector('#objects').style.display = 'block';
+    document.querySelector('#objects-tab').classList.add('active');
     
+    // Hide other tabs
+    document.querySelector('#zones').style.display = 'none';
+    document.querySelector('#history').style.display = 'none';
+
+    // Objects tab click
+    document.querySelector('#objects-tab').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
+        document.querySelector('#objects').style.display = 'block';
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        e.target.classList.add('active');
+        loadObjects();
+    });
+
+    // Zones tab click
+    document.querySelector('#zones-tab').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
+        document.querySelector('#zones').style.display = 'block';
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        e.target.classList.add('active');
+        loadZones();
+    });
+
+    // History tab click
+    document.querySelector('#history-tab').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
+        document.querySelector('#history').style.display = 'block';
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        e.target.classList.add('active');
+        loadHistory();
+    });
+
     // Load initial data
     loadObjects();
     loadZones();
-    
-    // Add tab change listeners
-    const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
-    tabs.forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function(event) {
-            const targetId = event.target.getAttribute('data-bs-target');
-            if (targetId === '#objects') {
-                loadObjects();
-            } else if (targetId === '#zones') {
-                loadZones();
-            }
-        });
-    });
 }); 
 
 // Make sure the table exists in your HTML
@@ -696,3 +817,389 @@ async function loadZoneDropdown() {
         showAlert('Error loading zones', 'danger');
     }
 } 
+
+// Clear cache when adding/updating/deleting
+function clearCache() {
+    zonesCache = null;
+    objectsCache = null;
+} 
+
+// Function to add history entry
+async function addHistoryEntry(objectId, actionType, comment) {
+    try {
+        const response = await fetch('/api/history', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                object_id: objectId,
+                action_type: actionType,
+                comment: comment
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save history');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error saving history:', error);
+        throw error;
+    }
+} 
+
+// Call loadZones when the page loads
+document.addEventListener('DOMContentLoaded', loadZones); 
+
+async function loadHistory() {
+    try {
+        const response = await fetch('/api/history');
+        if (!response.ok) throw new Error('Failed to fetch history');
+        const history = await response.json();
+        
+        const tableBody = document.querySelector('#historyTable tbody');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = '';
+        history.forEach(entry => {
+            const row = document.createElement('tr');
+            const date = new Date(entry.modification_date).toLocaleString();
+            row.innerHTML = `
+                <td>${date}</td>
+                <td>${entry.zone_name || 'N/A'}</td>
+                <td>${entry.action_type}</td>
+                <td>${entry.comment || ''}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error loading history', 'danger');
+    }
+}
+
+// Add this to your existing tab handling code
+document.querySelector('#history-tab').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
+    document.querySelector('#history').style.display = 'block';
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+    e.target.classList.add('active');
+    loadHistory();
+}); 
+
+// Add these bulk operation functions
+async function deleteZoneObjects() {
+    try {
+        const zones = await fetch('/api/zones').then(r => r.json());
+        
+        const { value: formValues } = await Swal.fire({
+            title: 'Delete Zone Objects',
+            html: `
+                <select id="zoneSelect" class="form-control mb-3">
+                    <option value="">Select a zone</option>
+                    ${zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('')}
+                </select>
+                <input id="comment" class="form-control mb-3" placeholder="Add a comment (optional)">
+                <input id="password" type="password" class="form-control" placeholder="Enter admin password">
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Delete',
+            preConfirm: () => {
+                const zoneId = document.getElementById('zoneSelect').value;
+                const comment = document.getElementById('comment').value;
+                const password = document.getElementById('password').value;
+                
+                if (!zoneId) {
+                    Swal.showValidationMessage('Please select a zone');
+                    return false;
+                }
+                if (!password) {
+                    Swal.showValidationMessage('Please enter the password');
+                    return false;
+                }
+                return { zoneId, comment, password };
+            }
+        });
+
+        if (formValues) {
+            console.log('Sending data:', {  // Debug log
+                password: formValues.password,
+                comment: formValues.comment
+            });
+            
+            const response = await fetch(`/api/zones/${formValues.zoneId}/objects`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    password: formValues.password,
+                    comment: formValues.comment
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to delete zone objects');
+            }
+
+            await loadObjects();
+            showAlert('Zone objects deleted successfully', 'success');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error: ' + error.message, 'danger');
+    }
+}
+
+async function deleteAllObjects() {
+    try {
+        const result = await Swal.fire({
+            title: 'Are you sure?',
+            text: "This will delete ALL objects! This action cannot be undone!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Yes, delete all!'
+        });
+
+        if (result.isConfirmed) {
+            const { value: password } = await Swal.fire({
+                title: 'Enter Admin Password',
+                input: 'password',
+                inputPlaceholder: 'Enter password',
+                showCancelButton: true,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'You need to enter the password!';
+                    }
+                }
+            });
+
+            if (password) {
+                const response = await fetch('/api/objects/all', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to delete all objects');
+                }
+
+                showAlert('All objects deleted successfully', 'success');
+                loadObjects();
+            }
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error: ' + error.message, 'danger');
+    }
+}
+
+// Similar implementations for deleteCategoryObjects and deleteStatusObjects
+async function deleteCategoryObjects() {
+    // Implementation similar to deleteZoneObjects but with categories
+}
+
+async function deleteStatusObjects() {
+    // Implementation similar to deleteZoneObjects but with statuses
+}
+
+// Update tab handling to include bulk operations
+document.querySelector('#bulk-operations-tab').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.style.display = 'none');
+    document.querySelector('#bulk-operations').style.display = 'block';
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+    e.target.classList.add('active');
+}); 
+
+// Add event listeners for the buttons
+document.getElementById('addZoneBtn').addEventListener('click', () => {
+    const modal = new bootstrap.Modal(document.getElementById('addZoneModal'));
+    modal.show();
+});
+
+document.getElementById('addObjectBtn').addEventListener('click', () => {
+    const modal = new bootstrap.Modal(document.getElementById('addObjectModal'));
+    modal.show();
+});
+
+// Add form submit handlers
+document.querySelector('#addZoneModal form').addEventListener('submit', addZone);
+document.querySelector('#addObjectModal form').addEventListener('submit', addObject); 
+
+// Function to populate zone dropdown
+async function populateZoneDropdown() {
+    try {
+        const response = await fetch('/api/zones');
+        if (!response.ok) {
+            throw new Error('Failed to fetch zones');
+        }
+        const zones = await response.json();
+        
+        const zoneSelect = document.getElementById('objectZone');
+        zoneSelect.innerHTML = '<option value="">Select a zone</option>';
+        
+        zones.forEach(zone => {
+            const option = document.createElement('option');
+            option.value = zone.id;
+            option.textContent = zone.name;
+            zoneSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading zones:', error);
+        showAlert('Error loading zones for dropdown', 'danger');
+    }
+}
+
+// Add event listener for the Add Object button
+document.getElementById('addObjectBtn').addEventListener('click', () => {
+    populateZoneDropdown(); // Populate zones when modal opens
+    const modal = new bootstrap.Modal(document.getElementById('addObjectModal'));
+    modal.show();
+});
+
+// Make sure the object form has the correct select element
+document.addEventListener('DOMContentLoaded', () => {
+    // Existing DOMContentLoaded code...
+    
+    // Add this to handle zone loading when switching to Objects tab
+    document.querySelector('#objects-tab').addEventListener('click', () => {
+        loadObjects();
+        populateZoneDropdown();
+    });
+}); 
+
+// Add edit object function
+async function editObject(objectId) {
+    try {
+        // Get the object data from the table row
+        const row = document.querySelector(`tr[data-object-id="${objectId}"]`);
+        const object = {
+            id: objectId,
+            name: row.cells[1].textContent,
+            description: row.cells[2].textContent,
+            zone_name: row.cells[3].textContent,
+            price: row.cells[5].textContent,
+            quantity: row.cells[6].textContent,
+            status: row.cells[7].textContent
+        };
+
+        // Populate zones dropdown
+        await populateZoneDropdown();
+
+        const { value: formValues } = await Swal.fire({
+            title: 'Edit Object',
+            html: `
+                <form id="editForm" class="text-start">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="editName" value="${object.name}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="editDescription">${object.description}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Zone</label>
+                        <select class="form-control" id="editZone" required>
+                            ${document.getElementById('objectZone').innerHTML}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Price</label>
+                        <input type="number" class="form-control" id="editPrice" value="${object.price}" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Quantity</label>
+                        <input type="number" class="form-control" id="editQuantity" value="${object.quantity}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-control" id="editStatus" required>
+                            <option value="Available" ${object.status === 'Available' ? 'selected' : ''}>Available</option>
+                            <option value="In Use" ${object.status === 'In Use' ? 'selected' : ''}>In Use</option>
+                            <option value="Maintenance" ${object.status === 'Maintenance' ? 'selected' : ''}>Maintenance</option>
+                        </select>
+                    </div>
+                </form>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Save',
+            preConfirm: () => {
+                return {
+                    name: document.getElementById('editName').value,
+                    description: document.getElementById('editDescription').value,
+                    zone_id: parseInt(document.getElementById('editZone').value),
+                    price: parseFloat(document.getElementById('editPrice').value),
+                    quantity: parseInt(document.getElementById('editQuantity').value),
+                    status: document.getElementById('editStatus').value
+                };
+            }
+        });
+
+        if (formValues) {
+            console.log('Sending update:', formValues); // Debug log
+            const updateResponse = await fetch(`/api/objects/${objectId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formValues)
+            });
+
+            if (!updateResponse.ok) {
+                const errorData = await updateResponse.json();
+                throw new Error(errorData.error || 'Failed to update object');
+            }
+
+            await loadObjects();
+            showAlert('Object updated successfully', 'success');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error updating object: ' + error.message, 'danger');
+    }
+} 
+
+// Make sure objects load when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Page loaded, loading objects...'); // Debug log
+    loadObjects();
+});
+
+// Also add this to ensure the table exists
+document.addEventListener('DOMContentLoaded', () => {
+    if (!document.querySelector('#objectsTable')) {
+        const container = document.querySelector('.container');
+        container.innerHTML += `
+            <table id="objectsTable" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Zone</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        `;
+    }
+    loadObjects();
+}); 

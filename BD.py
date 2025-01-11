@@ -6,6 +6,7 @@ Admin Password for deletion operations: admin123
 import sqlite3
 from sqlite3 import Error
 from flask import g
+from datetime import datetime
 
 
 ## CONEXION A LA BASE DE DATOS
@@ -44,6 +45,7 @@ def create_table(conn):
             new_value TEXT,            -- New value for updates
             modification_date DATETIME NOT NULL,
             modification_user TEXT NOT NULL,
+            comment TEXT,
             FOREIGN KEY (zone_id) REFERENCES zones(id),
             FOREIGN KEY (object_id) REFERENCES objects(id)
         );
@@ -98,6 +100,7 @@ def create_table(conn):
         """
         cursor.execute(create_objects_table)
         
+        
         conn.commit()
         
     except Error as e:
@@ -108,6 +111,18 @@ def add_object(conn, data):
     """Add a new object to the database"""
     try:
         cursor = conn.cursor()
+        # Check if data is a tuple and convert it to a dictionary if needed
+        if isinstance(data, tuple):
+            data = {
+                'name': data[0],
+                'description': data[1],
+                'zone_id': data[2],
+                'category_id': data[3],
+                'price': data[4],
+                'quantity': data[5],
+                'status': data[6]
+            }
+            
         cursor.execute('''
             INSERT INTO objects (
                 name, 
@@ -474,23 +489,34 @@ def list_zone_items(conn, zone_id, zone_name):
         return []
 
 ## AGREGAR UNA HISTORIA
-def add_history(conn, zone_id, object_id, action_type, field_modified=None, 
-                old_value=None, new_value=None, modification_user=None):
-    """Automatically add entry to history"""
+def add_history(conn, zone_id, object_id, action_type, modification_user='admin'):
+    """Add an entry to history with optional comment"""
     try:
         cursor = conn.cursor()
-        sql = """INSERT INTO history(
-            zone_id, object_id, action_type, field_modified,
-            old_value, new_value, modification_date, modification_user
-        ) VALUES(?, ?, ?, ?, ?, ?, datetime('now'), ?)"""
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        cursor.execute(sql, (
-            zone_id, object_id, action_type, field_modified,
-            old_value, new_value, modification_user
-        ))
+        # Ask for optional comment
+        want_comment = input("Would you like to add a comment? (y/n): ").lower()
+        comment = None
+        if want_comment == 'y':
+            comment = input("Enter your comment: ")
+
+        cursor.execute('''
+            INSERT INTO action_history (
+                zone_id,
+                object_id,
+                action_type,
+                modification_user,
+                comment,
+                modification_date
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        ''', (zone_id, object_id, action_type, modification_user, comment, current_time))
+        
         conn.commit()
-    except Error as e:
+        return True
+    except sqlite3.Error as e:
         print(f"Error adding history: {e}")
+        return False
 
 ## OBTENER LA HISTORIA DE LOS CAMBIOS
 def get_history(conn):
@@ -671,24 +697,24 @@ def get_history_summary(conn):
         sql = """
         SELECT 
             z.name as zone_name,
-            h.action_type,
-            h.field_modified,
+            ah.action_type,
             COUNT(*) as change_count,
             GROUP_CONCAT(o.name) as objects_modified,
-            h.modification_date,
-            h.modification_user
-        FROM history h
-        JOIN zones z ON h.zone_id = z.id
-        JOIN objects o ON h.object_id = o.id
+            ah.modification_date,
+            ah.modification_user,
+            ah.comment
+        FROM action_history ah
+        JOIN zones z ON ah.zone_id = z.id
+        JOIN objects o ON ah.object_id = o.id
         GROUP BY 
             z.id,
-            h.action_type,
-            h.field_modified,
-            DATE(h.modification_date)
+            ah.action_type,
+            DATE(ah.modification_date),
+            ah.comment
         ORDER BY 
-            h.modification_date DESC,
+            ah.modification_date DESC,
             z.name,
-            h.action_type
+            ah.action_type
         """
         cursor.execute(sql)
         return cursor.fetchall()
@@ -796,30 +822,29 @@ def get_zones(conn):
         raise
 
 def get_objects(conn):
-    """Get all objects from the database"""
+    """Get all objects from the database with their zone names"""
     try:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM objects')
+        cursor.execute('''
+            SELECT o.id, o.name, o.description, o.price, o.quantity, 
+                o.status, z.name as zone_name 
+            FROM objects o
+            LEFT JOIN zones z ON o.zone_id = z.id
+        ''')
         rows = cursor.fetchall()
-        print(f"Retrieved {len(rows)} objects from database")  # Debug print
         
         objects = []
         for row in rows:
-            # Convert row to dictionary using row.keys() for column names
             object_dict = {}
             for idx, column in enumerate(cursor.description):
                 object_dict[column[0]] = row[idx]
             objects.append(object_dict)
             
-        print(f"Formatted objects: {objects}")  # Debug print
         return objects
         
     except sqlite3.Error as e:
         print(f"Database error in get_objects: {e}")
         raise Exception(f"Database error: {str(e)}")
-    except Exception as e:
-        print(f"Error in get_objects: {e}")
-        raise
 
 if __name__ == '__main__':
     main()
