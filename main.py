@@ -19,7 +19,13 @@ from BD import (
     add_category,
     add_zone,
     get_all_zones,
-    remove_zone
+    remove_zone,
+    add_history,
+    get_history_summary,
+    delete_zone_objects,
+    delete_category_objects,
+    delete_status_objects,
+    delete_all_objects
 )
 
 def print_menu():
@@ -38,6 +44,12 @@ def print_menu():
     print("8. Add zone")           # Create new location
     print("9. List all zones")     # Show all locations
     print("10. Remove zone")       # Delete empty location
+    print("11. View History")    # Add this line
+    print("\n=== Bulk Delete Operations ===")
+    print("12. Delete all objects in a zone")
+    print("13. Delete all objects in a category")
+    print("14. Delete all objects with status")
+    print("15. Delete ALL objects")
     print("0. Exit")               # Close program
     print("================================")
 
@@ -93,6 +105,35 @@ def get_object_input():
                 user, user)  # user appears twice for creation and modification
     except ValueError:
         print("Invalid input! Please enter correct data types.")
+        return None
+
+def get_history_input():
+    """
+    Collects information for adding an entry to the history table.
+    Shows available action types to ensure consistency.
+    """
+    try:
+        object_id = int(input("Enter object ID: "))
+        
+        print("\nAvailable action types:")
+        print("1. CREATE")
+        print("2. UPDATE")
+        print("3. DELETE")
+        
+        action_choice = input("Select action type (1-3): ")
+        action_types = {
+            '1': 'CREATE',
+            '2': 'UPDATE',
+            '3': 'DELETE'
+        }
+        
+        if action_choice not in action_types:
+            print("Invalid action type!")
+            return None
+            
+        return (object_id, action_types[action_choice])
+    except ValueError:
+        print("Invalid input! Please enter a valid object ID.")
         return None
 
 def get_update_input():
@@ -152,31 +193,18 @@ def get_zone_input():
         return None
 
 def display_objects(objects):
-    """
-    Displays objects in a formatted way.
-    
-    Args:
-        objects: List of tuples containing object information
+    """Display all objects in a formatted way"""
+    if not objects:
+        return  # Don't print anything, let main handle empty case
         
-    Format for each object:
-    - ID
-    - Name
-    - Description
-    - Price
-    - Quantity
-    - Status
-    """
-    if objects:
-        for obj in objects:
-            print(f"\nID: {obj[0]}")
-            print(f"Name: {obj[1]}")
-            print(f"Description: {obj[2]}")
-            print(f"Price: ${obj[3]}")
-            print(f"Quantity: {obj[4]}")
-            print(f"Status: {obj[5]}")
-            print("-" * 30)
-    else:
-        print("No objects found")
+    for obj in objects:
+        print(f"\nID: {obj[0]}")
+        print(f"Name: {obj[1]}")
+        print(f"Description: {obj[2]}")
+        print(f"Price: ${obj[3]}")
+        print(f"Quantity: {obj[4]}")
+        print(f"Status: {obj[5]}")
+        print("-" * 30)
 
 def get_zone_id(conn, zone_name):
     """Get the id of a zone by name"""
@@ -198,6 +226,23 @@ def list_zone_items(conn, zone_id, zone_name):
     except Error as e:
         print(f"Error retrieving items: {e}")
         return []
+
+def display_history(history_items):
+    """Display all history entries with all fields"""
+    if not history_items:
+        print("\nNo history records found")
+        return
+        
+    for item in history_items:
+        print("\n=== Change Summary ===")
+        print(f"Zone: {item[0] if item[0] else 'Not specified'}")
+        print(f"Action Type: {item[1] if item[1] else 'Not specified'}")
+        print(f"Field Modified: {item[2] if item[2] else 'Not specified'}")
+        print(f"Number of Changes: {item[3] if item[3] else '0'}")
+        print(f"Objects Modified: {item[4] if item[4] else 'None'}")
+        print(f"Date: {item[5] if item[5] else 'Not specified'}")
+        print(f"User: {item[6] if item[6] else 'Not specified'}")
+        print("-" * 30)
 
 def main():
     """
@@ -223,7 +268,7 @@ def main():
     # Main program loop
     while True:
         print_menu()
-        choice = input("Enter your choice (0-10): ")
+        choice = input("Enter your choice (0-15): ")
         
         # Process user choice
         if choice == '0':
@@ -276,7 +321,10 @@ def main():
         elif choice == '4':
             print("\n--- Listing all objects ---")
             objects = get_all_objects(conn)
-            display_objects(objects)
+            if objects:
+                display_objects(objects)
+            else:
+                print("No objects found")
             
         elif choice == '5':
             print("\n--- Listing all categories ---")
@@ -337,6 +385,9 @@ def main():
             else:
                 print("No zones found")
             
+            # Remove the extra input prompt
+            # input("\nPress Enter to continue...")
+        
         elif choice == '10':
             print("\n--- Removing zone ---")
             # Show available zones first
@@ -354,9 +405,85 @@ def main():
             else:
                 print("No zones available to remove.")
             
+        elif choice == '11':
+            print("\n--- Viewing History ---")
+            history = get_history_summary(conn)
+            display_history(history)
+        
+        elif choice == '12':
+            print("\n--- Delete All Objects in Zone ---")
+            zones = get_all_zones(conn)
+            if zones:
+                print("\nAvailable Zones:")
+                for zone in zones:
+                    print(f"ID: {zone[0]} - Name: {zone[1]}")
+                try:
+                    zone_id = int(input("\nEnter zone ID: "))
+                    password = input("Enter admin password: ")
+                    if delete_zone_objects(conn, zone_id, password):
+                        print("Zone objects deleted successfully")
+                except ValueError:
+                    print("Invalid zone ID!")
+            else:
+                print("No zones available")
+
+        elif choice == '13':
+            print("\n--- Delete All Objects in Category ---")
+            categories = get_all_categories(conn)
+            if categories:
+                print("\nAvailable Categories:")
+                for category in categories:
+                    print(f"ID: {category[0]} - Name: {category[1]}")
+                try:
+                    category_id = int(input("\nEnter category ID: "))
+                    password = input("Enter admin password: ")
+                    if delete_category_objects(conn, category_id, password):
+                        print("Category objects deleted successfully")
+                except ValueError:
+                    print("Invalid category ID!")
+            else:
+                print("No categories available")
+
+        elif choice == '14':
+            print("\n--- Delete All Objects with Status ---")
+            statuses = get_all_statuses(conn)
+            if statuses:
+                print("\nAvailable Statuses:")
+                for status in statuses:
+                    print(f"ID: {status[0]} - Name: {status[1]}")
+                try:
+                    status_id = int(input("\nEnter status ID: "))
+                    password = input("Enter admin password: ")
+                    if delete_status_objects(conn, status_id, password):
+                        print("Status objects deleted successfully")
+                except ValueError:
+                    print("Invalid status ID!")
+            else:
+                print("No statuses available")
+
+        elif choice == '15':
+            print("\n--- Delete ALL Objects ---")
+            print("WARNING: This will delete all objects in the database!")
+            password = input("Enter admin password: ")
+            if delete_all_objects(conn, password):
+                print("All objects deleted successfully")
+
         else:
             print("Invalid choice! Please try again.")
         
+        # Add history entry only for specific actions that modify the database
+        if choice in ['1', '2', '3']:  # Only for add, update, delete object
+            history_data = get_history_input()
+            if history_data:
+                object_id, action_type = history_data  # Unpack the tuple
+                add_history(conn, 
+                        zone_id=1,  # Default zone or get from object
+                        object_id=object_id,
+                        action_type=action_type,
+                        modification_user='admin')  # Or get from previous input
+                print("History entry added successfully.")
+        
+
         # Wait for user acknowledgment before showing menu again
         input("\nPress Enter to continue...")
     

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .action-buttons button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Inventory Management System</h1>
+        
+        <!-- Tabs -->
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="objects-tab" data-bs-toggle="tab" href="#objects">Objects</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="zones-tab" data-bs-toggle="tab" href="#zones">Zones</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="bulk-tab" data-bs-toggle="tab" href="#bulk">Bulk Operations</a>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="myTabContent">
+            <!-- Objects Tab -->
+            <div class="tab-pane fade show active" id="objects" role="tabpanel">
+                <button class="btn btn-primary mt-3" onclick="showAddObjectModal()">
+                    <i class="fas fa-plus"></i> Add Object
+                </button>
+                <table class="table mt-3" id="objectsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Zones Tab -->
+            <div class="tab-pane fade" id="zones" role="tabpanel">
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="showAddZoneModal()">
+                        <i class="fas fa-plus"></i> Add Zone
+                    </button>
+                    <table class="table mt-3" id="zonesTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Zones will be loaded here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bulk Operations Tab -->
+            <div class="tab-pane fade" id="bulk" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">Danger Zone</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-danger" onclick="showBulkDeleteModal('zone')">
+                                <i class="fas fa-trash"></i> Delete Zone Objects
+                            </button>
+                            <button class="btn btn-danger" onclick="showBulkDeleteModal('category')">
+                                <i class="fas fa-trash"></i> Delete Category Objects
+                            </button>
+                            <button class="btn btn-danger" onclick="showBulkDeleteModal('all')">
+                                <i class="fas fa-trash"></i> Delete All Objects
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Include your existing modals here -->
+        
+    </div>
+
+    <!-- Add Zone Modal -->
+    <div class="modal fade" id="addZoneModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Zone</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form onsubmit="addZone(event)">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="zoneName" class="form-label">Zone Name</label>
+                            <input type="text" class="form-control" id="zoneName" name="zoneName" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Zone</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Object Modal -->
+    <div class="modal fade" id="addObjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Object</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="addObjectForm" onsubmit="addObject(event)">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="objectName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="objectName" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="objectDescription" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectZone" class="form-label">Zone</label>
+                            <select class="form-control" id="objectZone" name="zone_id" required>
+                                <option value="">Select a zone</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectCategory" class="form-label">Category</label>
+                            <select class="form-control" id="objectCategory" name="category_id" required>
+                                <option value="1">Tools</option>
+                                <option value="2">Equipment</option>
+                                <option value="3">Materials</option>
+                                <option value="4">Supplies</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectPrice" class="form-label">Price</label>
+                            <input type="number" class="form-control" id="objectPrice" name="price" step="0.01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectQuantity" class="form-label">Quantity</label>
+                            <input type="number" class="form-control" id="objectQuantity" name="quantity" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="objectStatus" class="form-label">Status</label>
+                            <select class="form-control" id="objectStatus" name="status" required>
+                                <option value="Available">Available</option>
+                                <option value="In Use">In Use</option>
+                                <option value="Maintenance">Maintenance</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Object</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 

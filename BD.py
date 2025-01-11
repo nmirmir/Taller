@@ -1,12 +1,11 @@
 """
-Database Operations Module
-Handles all database interactions for the Inventory Management System.
-Uses SQLite for data storage and management.
+Inventory Management System - Database Operations
+Admin Password for deletion operations: admin123
 """
 
 import sqlite3
 from sqlite3 import Error
-from datetime import datetime
+from flask import g
 
 
 ## CONEXION A LA BASE DE DATOS
@@ -29,110 +28,77 @@ def create_connection():
 
 ## CREACION DE LAS TABLAS
 def create_table(conn):
-    """
-    Creates all necessary tables in the database if they don't exist.
-    Also adds default values for categories, statuses, and zones.
-    
-    Tables created:
-    1. zones - Locations where items are stored
-    2. categories - Item classifications
-    3. statuses - Possible states of items
-    4. objects - Main inventory items table
-    
-    Args:
-        conn: Database connection object
-    """
+    """Create tables including a detailed history table"""
     try:
         cursor = conn.cursor()
         
-        # Enable foreign key support for referential integrity
-        cursor.execute("PRAGMA foreign_keys = ON")
+        # Create history table for tracking all changes
+        create_history_table = """
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            zone_id INTEGER,
+            object_id INTEGER,
+            action_type TEXT NOT NULL,  -- 'CREATE', 'UPDATE', 'DELETE', 'ZONE_DELETED'
+            field_modified TEXT,        -- NULL for CREATE/DELETE, field name for UPDATE
+            old_value TEXT,            -- Previous value for updates
+            new_value TEXT,            -- New value for updates
+            modification_date DATETIME NOT NULL,
+            modification_user TEXT NOT NULL,
+            FOREIGN KEY (zone_id) REFERENCES zones(id),
+            FOREIGN KEY (object_id) REFERENCES objects(id)
+        );
+        """
+        cursor.execute(create_history_table)
         
-        # Create zones table for storing locations
+        # Create other tables
         create_zones_table = """
         CREATE TABLE IF NOT EXISTS zones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
         );
         """
+        cursor.execute(create_zones_table)
         
-        # Create categories table for item classifications
         create_categories_table = """
         CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
         );
         """
+        cursor.execute(create_categories_table)
         
-        # Create statuses table for item states
         create_statuses_table = """
         CREATE TABLE IF NOT EXISTS statuses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
         );
         """
+        cursor.execute(create_statuses_table)
         
-        # Create main objects table with all necessary fields
         create_objects_table = """
         CREATE TABLE IF NOT EXISTS objects (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            price DECIMAL(10, 2) NOT NULL,
-            quantity INTEGER NOT NULL,
-            category_id INTEGER NOT NULL,
-            zone_id INTEGER NOT NULL,
-            status_id INTEGER NOT NULL,
-            creation_user TEXT NOT NULL,
-            modification_user TEXT NOT NULL,
-            creation_date DATE NOT NULL,
-            modification_date DATE NOT NULL,
-            deletion_date DATE,             -- Null if not deleted
-            deletion_user TEXT,             -- Null if not deleted
-            FOREIGN KEY (category_id) REFERENCES categories(id),
-            FOREIGN KEY (zone_id) REFERENCES zones(id),
-            FOREIGN KEY (status_id) REFERENCES statuses(id)
+            description TEXT,
+            price REAL,
+            quantity INTEGER,
+            category_id INTEGER,
+            zone_id INTEGER,
+            status_id INTEGER,
+            creation_user TEXT,
+            modification_user TEXT,
+            creation_date DATETIME,
+            modification_date DATETIME,
+            deletion_date DATETIME,
+            deletion_user TEXT,
+            FOREIGN KEY (category_id) REFERENCES categories (id),
+            FOREIGN KEY (zone_id) REFERENCES zones (id),
+            FOREIGN KEY (status_id) REFERENCES statuses (id)
         );
         """
-        
-        # Execute all create statements
-        cursor.execute(create_categories_table)
-        cursor.execute(create_statuses_table)
-        cursor.execute(create_zones_table)
         cursor.execute(create_objects_table)
         
-        # Insert default categories if they don't exist
-        cursor.execute("""
-        INSERT OR IGNORE INTO categories (id, name) 
-        VALUES 
-            (1, 'Tools'),        -- Hand tools, power tools, etc.
-            (2, 'Materials'),    -- Raw materials, components
-            (3, 'Consumables'),  -- Items that get used up
-            (4, 'Equipment');    -- Larger machinery or devices
-        """)
-
-        # Insert default statuses if they don't exist
-        cursor.execute("""
-        INSERT OR IGNORE INTO statuses (id, name) 
-        VALUES 
-            (1, 'Active'),       -- In use/available
-            (2, 'Maintenance'),  -- Under repair/maintenance
-            (3, 'Out of Service'), -- Not usable
-            (4, 'Reserved');     -- Reserved for specific use
-        """)
-
-        # Insert default zones if they don't exist
-        cursor.execute("""
-        INSERT OR IGNORE INTO zones (id, name) 
-        VALUES 
-            (1, 'Zona de Mecanizado'),  -- Machining area
-            (2, 'Zona de Soldadura'),   -- Welding area
-            (3, 'Zona de Impresion'),   -- Printing area
-            (4, 'Zona del Laser');      -- Laser area
-        """)
-
         conn.commit()
-        print("Tables and default values created successfully")
         
     except Error as e:
         print(f"Error creating tables: {e}")
@@ -140,33 +106,51 @@ def create_table(conn):
 ## INSERTAR UN OBJETO
 def add_object(conn, object_data):
     """
-    Adds a new object to the inventory.
+    Adds a new object to the inventory, reusing available IDs
     
     Args:
         conn: Database connection object
-        object_data: Tuple containing (name, description, price, quantity,
-                    category_id, zone_id, status_id, creation_user,
-                    modification_user)
+        object_data: Tuple containing object details
     
     Returns:
-        int: ID of newly created object if successful
+        int: ID of newly created object
         None: If operation fails
     """
     try:
         cursor = conn.cursor()
         current_time = datetime.now().strftime('%Y-%m-%d')
         
-        # SQL for inserting new object with all fields
+        # Check if table is empty
+        cursor.execute("SELECT COUNT(*) FROM objects")
+        if cursor.fetchone()[0] == 0:
+            next_id = 1
+        else:
+            # Find gaps in the sequence
+            cursor.execute("""
+                SELECT MIN(t1.id + 1) as next_id
+                FROM objects t1
+                LEFT JOIN objects t2 ON t1.id + 1 = t2.id
+                WHERE t2.id IS NULL
+            """)
+            result = cursor.fetchone()[0]
+            if result is None:
+                # If no gaps, use the next number after the highest ID
+                cursor.execute("SELECT MAX(id) + 1 FROM objects")
+                next_id = cursor.fetchone()[0]
+            else:
+                next_id = result
+        
+        # SQL for inserting new object with specific ID
         sql = """INSERT INTO objects(
-            name, description, price, quantity, 
+            id, name, description, price, quantity, 
             category_id, zone_id, status_id,
             creation_user, modification_user,
             creation_date, modification_date,
             deletion_date, deletion_user
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
         
-        # Complete the object data with dates and null deletion fields
         complete_object = (
+            next_id,           # Specific ID
             *object_data,      # Original data
             current_time,      # creation_date
             current_time,      # modification_date
@@ -176,100 +160,78 @@ def add_object(conn, object_data):
         
         cursor.execute(sql, complete_object)
         conn.commit()
-        return cursor.lastrowid
+        return next_id
     except Error as e:
         print(f"Error adding object: {e}")
         return None
 ## ELIMINAR UN OBJETO
 def delete_object(conn, object_id, deletion_user):
-    """Delete an object from the database"""
+    """
+    Soft delete an object by setting its deletion date
+    
+    Args:
+        conn: Database connection object
+        object_id: ID of the object to delete
+        deletion_user: Username of person performing deletion
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
     try:
         cursor = conn.cursor()
         current_time = datetime.now().strftime('%Y-%m-%d')
         
-        # First check if object exists and is not already deleted
+        # Check if object exists and is not already deleted
         cursor.execute("""
             SELECT id FROM objects 
             WHERE id = ? AND deletion_date IS NULL
         """, (object_id,))
         
         if not cursor.fetchone():
-            print("Object not found or already deleted")
+            print(f"Object {object_id} not found or already deleted")
             return False
         
-        # Update the object with deletion info
-        sql = """UPDATE objects 
-                SET deletion_date = ?, 
-                    deletion_user = ?
-                WHERE id = ? 
-                AND deletion_date IS NULL"""
-                
-        cursor.execute(sql, (current_time, deletion_user, object_id))
+        # Soft delete by updating deletion fields
+        cursor.execute("""
+            UPDATE objects 
+            SET deletion_date = ?,
+                deletion_user = ?
+            WHERE id = ?
+        """, (current_time, deletion_user, object_id))
+        
         conn.commit()
-        
-        if cursor.rowcount == 0:
-            print("Failed to delete object")
-            return False
-            
-        print(f"Object {object_id} marked as deleted by {deletion_user} on {current_time}")
         return True
+        
     except Error as e:
         print(f"Error deleting object: {e}")
         return False
 
 ## ACTUALIZAR UN OBJETO
-def update_object(conn, object_id, update_data, modification_user):
-    """Update an object's information and return detailed feedback"""
+def update_object(conn, object_id, updates, modification_user):
+    """Update object and record history"""
     try:
         cursor = conn.cursor()
         
-        # First, get the original object data
-        cursor.execute("SELECT * FROM objects WHERE id = ?", (object_id,))
-        original_object = cursor.fetchone()
+        # Get current object data for history
+        cursor.execute("SELECT zone_id FROM objects WHERE id = ?", (object_id,))
+        zone_id = cursor.fetchone()[0]
         
-        if not original_object:
-            print(f"No object found with ID {object_id}")
-            return False
+        # Record each field update separately in history
+        for field, new_value in updates.items():
+            cursor.execute(f"SELECT {field} FROM objects WHERE id = ?", (object_id,))
+            old_value = cursor.fetchone()[0]
             
-        # Get column names for better feedback
-        cursor.execute("PRAGMA table_info(objects)")
-        columns = [column[1] for column in cursor.fetchall()]
-        original_dict = dict(zip(columns, original_object))
+            add_history(
+                conn, zone_id, object_id, 'UPDATE', 
+                field, str(old_value), str(new_value), 
+                modification_user
+            )
         
-        current_time = datetime.now().strftime('%Y-%m-%d')
-        
-        # Build the update query dynamically based on the fields to update
-        update_fields = [f"{field} = ?" for field in update_data.keys()]
-        update_fields.append("modification_date = ?")
-        update_fields.append("modification_user = ?")
-        
-        sql = f"""UPDATE objects 
-                SET {', '.join(update_fields)}
-                WHERE id = ?"""
-        
-        # Add the values in the correct order
-        values = (*update_data.values(), current_time, modification_user, object_id)
-        
-        cursor.execute(sql, values)
+        # Perform the update
+        set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
+        sql = f"UPDATE objects SET {set_clause} WHERE id = ?"
+        cursor.execute(sql, (*updates.values(), object_id))
         conn.commit()
-        
-        # Get the updated object data
-        cursor.execute("SELECT * FROM objects WHERE id = ?", (object_id,))
-        updated_object = cursor.fetchone()
-        updated_dict = dict(zip(columns, updated_object))
-        
-        # Generate detailed feedback
-        print(f"\nObject ID {object_id} updated successfully:")
-        print("-" * 40)
-        for field in update_data.keys():
-            old_value = original_dict[field]
-            new_value = updated_dict[field]
-            print(f"{field}:")
-            print(f"  Old value: {old_value}")
-            print(f"  New value: {new_value}")
-        print("-" * 40)
-        print(f"Modified by: {modification_user}")
-        print(f"Modified on: {current_time}")
         
         return True
     except Error as e:
@@ -332,7 +294,7 @@ def get_all_objects(conn):
         cursor = conn.cursor()
         # Select only non-deleted objects and join with status
         cursor.execute("""
-            SELECT o.id, o.name, o.description, o.price, o.quantity, s.name as status
+            SELECT o.id, o.name, o.description, o.price, o.quantity, o.category_id, o.zone_id, o.status_id, s.name  as status
             FROM objects o
             JOIN statuses s ON o.status_id = s.id
             WHERE o.deletion_date IS NULL
@@ -393,22 +355,31 @@ def get_all_zones(conn):
         return []
 
 ## AGREGAR UNA ZONA
-def add_zone(conn, zone_data):
-    """Add a new zone"""
+def add_zone(conn, name):
+    """Add a new zone to the database"""
     try:
         cursor = conn.cursor()
-        
-        sql = """INSERT INTO zones(
-            name
-        ) VALUES(?)"""
-        
-        # Only use the name from zone_data
-        cursor.execute(sql, (zone_data[0],))
+        # Check if zone already exists - using simpler parameter binding
+        cursor.execute('SELECT id FROM zones WHERE name = ?', [name])
+        if cursor.fetchone():
+            raise Exception("A zone with this name already exists")
+            
+        # Insert new zone - using simpler parameter binding
+        cursor.execute('INSERT INTO zones (name) VALUES (?)', [name])
         conn.commit()
-        return cursor.lastrowid
-    except Error as e:
-        print(f"Error adding zone: {e}")
-        return None
+        
+        # Get the id of the newly inserted zone
+        zone_id = cursor.lastrowid
+        return zone_id
+        
+    except sqlite3.Error as e:
+        print(f"Database error in add_zone: {e}")
+        conn.rollback()
+        raise Exception(f"Database error: {str(e)}")
+    except Exception as e:
+        print(f"Error in add_zone: {e}")
+        conn.rollback()
+        raise
 
 ## OBTENER LOS DATOS DE LA ZONA
 def get_zone_input():
@@ -422,31 +393,65 @@ def get_zone_input():
 
 ## ELIMINAR UNA ZONA
 def remove_zone(conn, zone_id):
-    """Delete a zone if it has no active objects"""
+    """Delete a zone and record in history"""
     try:
         cursor = conn.cursor()
         
-        # First disable foreign key constraints temporarily
+        # Get zone name before deletion for history
+        cursor.execute("SELECT name FROM zones WHERE id = ?", (zone_id,))
+        zone_name = cursor.fetchone()
+        if not zone_name:
+            print("Zone not found")
+            return False
+            
+        # Temporarily disable foreign key constraints
         cursor.execute("PRAGMA foreign_keys = OFF")
         
         # Check if zone exists
         cursor.execute("SELECT id FROM zones WHERE id = ?", (zone_id,))
         if not cursor.fetchone():
             print("Zone not found")
+            cursor.execute("PRAGMA foreign_keys = ON")  # Re-enable constraints
             return False
         
-        # Delete the zone
-        cursor.execute("DELETE FROM zones WHERE id = ?", (zone_id,))
+        # Check for active objects in the zone
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM objects 
+            WHERE zone_id = ? 
+            AND deletion_date IS NULL
+        """, (zone_id,))
         
-        # Update any objects that were in this zone to zone_id = 1 (default zone)
+        count = cursor.fetchone()[0]
+        if count > 0:
+            print(f"Cannot delete zone: {count} objects are still assigned to this zone")
+            cursor.execute("PRAGMA foreign_keys = ON")  # Re-enable constraints
+            return False
+        
+        # Update any objects that reference this zone to use zone_id = 1
         cursor.execute("""
             UPDATE objects 
             SET zone_id = 1 
             WHERE zone_id = ?
         """, (zone_id,))
         
+        # Now delete the zone
+        cursor.execute("DELETE FROM zones WHERE id = ?", (zone_id,))
+        
         # Re-enable foreign key constraints
         cursor.execute("PRAGMA foreign_keys = ON")
+        
+        # Record zone deletion in history
+        add_history(
+            conn,
+            zone_id=zone_id,
+            object_id=None,  # No specific object
+            action_type='ZONE_DELETED',
+            field_modified='zone',
+            old_value=zone_name[0],
+            new_value=None,
+            modification_user='admin'  # Or pass the current user
+        )
         
         conn.commit()
         print("Zone deleted successfully")
@@ -454,7 +459,7 @@ def remove_zone(conn, zone_id):
         
     except Error as e:
         print(f"Error deleting zone: {e}")
-        cursor.execute("PRAGMA foreign_keys = ON")  # Make sure to re-enable foreign keys
+        cursor.execute("PRAGMA foreign_keys = ON")  # Make sure to re-enable constraints
         return False
 
 ## AGREGAR UNA CATEGORIA
@@ -499,6 +504,175 @@ def list_zone_items(conn, zone_id, zone_name):
         print(f"Error retrieving items: {e}")
         return []
 
+## AGREGAR UNA HISTORIA
+def add_history(conn, zone_id, object_id, action_type, field_modified=None, 
+                old_value=None, new_value=None, modification_user=None):
+    """Automatically add entry to history"""
+    try:
+        cursor = conn.cursor()
+        sql = """INSERT INTO history(
+            zone_id, object_id, action_type, field_modified,
+            old_value, new_value, modification_date, modification_user
+        ) VALUES(?, ?, ?, ?, ?, ?, datetime('now'), ?)"""
+        
+        cursor.execute(sql, (
+            zone_id, object_id, action_type, field_modified,
+            old_value, new_value, modification_user
+        ))
+        conn.commit()
+    except Error as e:
+        print(f"Error adding history: {e}")
+
+## OBTENER LA HISTORIA DE LOS CAMBIOS
+def get_history(conn):
+    """Get history of changes"""
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM history")
+    return cursor.fetchall()
+
+def check_admin_password(password):
+    """Verify admin password for dangerous operations"""
+    ADMIN_PASSWORD = "admin123"  # Default admin password
+    return password == ADMIN_PASSWORD
+
+def delete_zone_objects(conn, zone_id, admin_password):
+    """Soft delete all objects in a specific zone with password protection"""
+    try:
+        if not check_admin_password(admin_password):
+            print("Invalid admin password!")
+            return False
+            
+        cursor = conn.cursor()
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        
+        # Get zone name for confirmation
+        cursor.execute("SELECT name FROM zones WHERE id = ?", (zone_id,))
+        zone_name = cursor.fetchone()
+        if not zone_name:
+            print("Zone not found")
+            return False
+            
+        # Soft delete objects
+        cursor.execute("""
+            UPDATE objects 
+            SET deletion_date = ?, 
+                deletion_user = 'admin'
+            WHERE zone_id = ? 
+            AND deletion_date IS NULL
+        """, (current_time, zone_id))
+        
+        affected = cursor.rowcount
+        conn.commit()
+        
+        print(f"All objects ({affected}) in zone '{zone_name[0]}' have been deleted")
+        return True
+    except Error as e:
+        print(f"Error deleting zone objects: {e}")
+        return False
+
+def delete_category_objects(conn, category_id, admin_password):
+    """Soft delete all objects in a specific category with password protection"""
+    try:
+        if not check_admin_password(admin_password):
+            print("Invalid admin password!")
+            return False
+            
+        cursor = conn.cursor()
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        
+        # Get category name for confirmation
+        cursor.execute("SELECT name FROM categories WHERE id = ?", (category_id,))
+        category_name = cursor.fetchone()
+        if not category_name:
+            print("Category not found")
+            return False
+            
+        # Soft delete objects
+        cursor.execute("""
+            UPDATE objects 
+            SET deletion_date = ?, 
+                deletion_user = 'admin'
+            WHERE category_id = ? 
+            AND deletion_date IS NULL
+        """, (current_time, category_id))
+        
+        affected = cursor.rowcount
+        conn.commit()
+        
+        print(f"All objects ({affected}) in category '{category_name[0]}' have been deleted")
+        return True
+    except Error as e:
+        print(f"Error deleting category objects: {e}")
+        return False
+
+def delete_status_objects(conn, status_id, admin_password):
+    """Soft delete all objects with a specific status with password protection"""
+    try:
+        if not check_admin_password(admin_password):
+            print("Invalid admin password!")
+            return False
+            
+        cursor = conn.cursor()
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        
+        # Get status name for confirmation
+        cursor.execute("SELECT name FROM statuses WHERE id = ?", (status_id,))
+        status_name = cursor.fetchone()
+        if not status_name:
+            print("Status not found")
+            return False
+            
+        # Soft delete objects
+        cursor.execute("""
+            UPDATE objects 
+            SET deletion_date = ?, 
+                deletion_user = 'admin'
+            WHERE status_id = ? 
+            AND deletion_date IS NULL
+        """, (current_time, status_id))
+        
+        affected = cursor.rowcount
+        conn.commit()
+        
+        print(f"All objects ({affected}) with status '{status_name[0]}' have been deleted")
+        return True
+    except Error as e:
+        print(f"Error deleting status objects: {e}")
+        return False
+
+def delete_all_objects(conn, admin_password):
+    """Soft delete all objects with password protection"""
+    try:
+        if not check_admin_password(admin_password):
+            print("Invalid admin password!")
+            return False
+            
+        # Double confirmation for dangerous operation
+        confirm = input("Are you sure you want to delete ALL objects? (yes/no): ")
+        if confirm.lower() != 'yes':
+            print("Operation cancelled")
+            return False
+            
+        cursor = conn.cursor()
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        
+        # Soft delete all objects
+        cursor.execute("""
+            UPDATE objects 
+            SET deletion_date = ?, 
+                deletion_user = 'admin'
+            WHERE deletion_date IS NULL
+        """, (current_time,))
+        
+        affected = cursor.rowcount
+        conn.commit()
+        
+        print(f"All objects ({affected}) have been deleted")
+        return True
+    except Error as e:
+        print(f"Error deleting all objects: {e}")
+        return False
+
 ## MAIN
 def main():
     # Create a database connection
@@ -521,5 +695,184 @@ def main():
     else:
         print("Error! Cannot create the database connection.")
 
+def get_history_summary(conn):
+    """Get grouped history of changes"""
+    try:
+        cursor = conn.cursor()
+        sql = """
+        SELECT 
+            z.name as zone_name,
+            h.action_type,
+            h.field_modified,
+            COUNT(*) as change_count,
+            GROUP_CONCAT(o.name) as objects_modified,
+            h.modification_date,
+            h.modification_user
+        FROM history h
+        JOIN zones z ON h.zone_id = z.id
+        JOIN objects o ON h.object_id = o.id
+        GROUP BY 
+            z.id,
+            h.action_type,
+            h.field_modified,
+            DATE(h.modification_date)
+        ORDER BY 
+            h.modification_date DESC,
+            z.name,
+            h.action_type
+        """
+        cursor.execute(sql)
+        return cursor.fetchall()
+    except Error as e:
+        print(f"Error getting history: {e}")
+        return []
+
+def initialize_data(conn):
+    """Initialize basic data in the database"""
+    try:
+        cursor = conn.cursor()
+        
+        # Add default statuses if they don't exist
+        statuses = [
+            (1, 'Available'),
+            (2, 'In Use'),
+            (3, 'Maintenance'),
+            (4, 'Retired')
+        ]
+        cursor.executemany("""
+            INSERT OR IGNORE INTO statuses (id, name)
+            VALUES (?, ?)
+        """, statuses)
+        
+        # Add default categories if they don't exist
+        categories = [
+            (1, 'Electronics'),
+            (2, 'Furniture'),
+            (3, 'Tools'),
+            (4, 'Office Supplies')
+        ]
+        cursor.executemany("""
+            INSERT OR IGNORE INTO categories (id, name)
+            VALUES (?, ?)
+        """, categories)
+        
+        # Add default zone if it doesn't exist
+        zones = [
+            (1, 'General Zone'),
+            (2, 'Storage'),
+            (3, 'Office')
+        ]
+        cursor.executemany("""
+            INSERT OR IGNORE INTO zones (id, name)
+            VALUES (?, ?)
+        """, zones)
+        
+        conn.commit()
+    except Error as e:
+        print(f"Error initializing data: {e}")
+
+def get_db():
+    """Get database connection"""
+    if 'db' not in g:
+        g.db = sqlite3.connect('inventory.db')
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+def init_db(app):
+    """Initialize the database."""
+    try:
+        with app.app_context():
+            db = get_db()
+            with app.open_resource('schema.sql', mode='r') as f:
+                db.executescript(f.read())
+            
+            # Add default zones
+            cursor = db.cursor()
+            default_zones = [
+                ('Zona de Mecanizado',),
+                ('Zona de Soldadura',),
+                ('Zona de Impresion',),
+                ('Zona del Laser',)
+            ]
+            cursor.executemany('INSERT INTO zones (name) VALUES (?)', default_zones)
+            db.commit()
+            print("Database initialized successfully with default zones")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        raise
+
+def close_db(e=None):
+    """Close database connection"""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
+def get_zones(conn):
+    """Get all zones from the database"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name FROM zones')
+        zones = []
+        for row in cursor.fetchall():
+            zones.append({
+                'id': row[0],
+                'name': row[1]
+            })
+        return zones
+    except sqlite3.Error as e:
+        print(f"Database error getting zones: {e}")
+        raise Exception(f"Database error: {str(e)}")
+    except Exception as e:
+        print(f"Error getting zones: {e}")
+        raise
+
+def get_objects(conn):
+    """Get all objects from the database"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM objects')
+        rows = cursor.fetchall()
+        print(f"Retrieved {len(rows)} objects from database")  # Debug print
+        
+        objects = []
+        for row in rows:
+            # Convert row to dictionary using row.keys() for column names
+            object_dict = {}
+            for idx, column in enumerate(cursor.description):
+                object_dict[column[0]] = row[idx]
+            objects.append(object_dict)
+            
+        print(f"Formatted objects: {objects}")  # Debug print
+        return objects
+        
+    except sqlite3.Error as e:
+        print(f"Database error in get_objects: {e}")
+        raise Exception(f"Database error: {str(e)}")
+    except Exception as e:
+        print(f"Error in get_objects: {e}")
+        raise
+
+def add_object(conn, data):
+    """Add a new object to the database"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO objects (name, description, price, quantity, status)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            data['name'],
+            data.get('description', ''),
+            data['price'],
+            data['quantity'],
+            data['status']
+        ))
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Database error in add_object: {e}")
+        conn.rollback()
+        raise Exception(f"Database error: {str(e)}")
+
 if __name__ == '__main__':
     main()
+
