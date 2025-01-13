@@ -188,3 +188,102 @@ def delete_object(conn,object_id):
         return False
 
 
+## OPERATIONS WITH ZONES
+def add_zone(conn,data):
+    try:
+        cursor = conn.cursor()
+
+        # Check if zone already exists
+        cursor.execute("""
+        SELECT id FROM zones WHERE name = ?
+        """,(data['name']))
+        if cursor.fetchone():
+            raise Exception("A zone with this name already exists")
+        
+        # Insert new zone
+        cursor.execute("""
+            INSERT INTO zones (name)
+            VALUES (?)
+        """,(data['name'],))
+        conn.commit()
+        return cursor.lastrowid
+    except Error as e:
+        print(f"Error adding zone {e}")
+        conn.rollback()
+        print(f"Error adding zone {e}")
+        return False
+
+def update_zone(conn,data):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE zones
+                SET name = ?
+                WHERE id = ?
+        """,(data['name'],data['id']))
+        print(f"Zone {data['id']} updated successfully")
+        conn.commit()
+        return cursor.lastrowid
+    except Error as e:
+        print(f"Error updating zone {e}")
+        conn.rollback()
+        print(f"Error updating zone {e}")
+        return False
+
+def delete_zone(conn,zone_id):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM zones
+            WHERE id = ? AND deletion_date IS NULL
+        """,(zone_id))
+        if not cursor.fetchone():
+            print(f"Zone {zone_id} not found or already deleted")
+            return False
+        #Record zone deletion in history
+        
+        conn.commit()
+        print(f"Zone {zone_id} deleted successfully")
+        return True
+    except Error as e:
+        print(f"Error deleting zone {e}")
+        conn.rollback()
+        print(f"Error deleting zone {e}")
+        return False
+
+def list_objects(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT o.id, o.name, o.description, o.price, o.quantity, o.category_id, o.zone_id, o.status_id
+            FROM objects o
+            WHERE deletion_date IS NULL
+            ORDER BY o.quantity DESC
+        """,)
+        objects = cursor.fetchall()
+        if not objects:
+            print("No objects found")
+            return []
+        return objects
+    except Error as e:
+        print(f"Error listing objects: {e}")
+        return []
+
+def list_zones(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name
+            FROM zones
+            WHERE deletion_date IS NULL
+            ORDER BY name
+        """)
+        zones = cursor.fetchall()
+        if not zones:
+            print("No zones found")
+            return []
+        return zones
+    except Error as e:
+        print(f"Error listing zones: {e}")
+        return []
+
