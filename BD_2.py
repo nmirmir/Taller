@@ -82,10 +82,10 @@ def create_table(conn):
             field_modified TEXT,
             old_value TEXT,
             nex_value TEXT,
-            modification_date DATETIME NOT NULL
+            modification_date DATETIME NOT NULL,
             comment TEXT,
             FOREIGN KEY (zone_id) REFERENCES zones (id),
-            FOREIGN KEY (object_od) REFERENCES object (id)
+            FOREIGN KEY (object_id) REFERENCES object (id)
         )
         """
 

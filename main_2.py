@@ -3,7 +3,7 @@
 from sqlite3 import Error
 from BD_2 import(
     create_connection,
-    create_tables,
+    create_table,
     add_object,
     update_object,
     delete_object,
@@ -14,13 +14,189 @@ from BD_2 import(
     list_zones
 )
 
-import sqlite3
-from datetime import datetime
+def display_menu():
+    print("--------------------------------")
+    print("Inventory Management System")
+    print("1. Add new object")
+    print("2. Update object")
+    print("3. Delete object")
+    print("4. Add new zone")
+    print("5. Update zone")
+    print("6. Delete zone")
+    print("7. List objects")
+    print("8. List zones")
+    print("9. Exit")
+    print("--------------------------------")
+
+def handle_user_input():
+    while True:
+        display_menu()
+        choice = input("Enter your choice: ")
+        
+        if choice == '1':
+            # Add new object
+            try:
+                name = input("Enter the name of the object: ")
+                description = input("Enter the description of the object: ")
+                price = float(input("Enter the price of the object: "))
+                quantity = int(input("Enter the quantity of the object: "))
+                
+                # Show available zones
+                display_zones()
+                
+                zone_id = int(input("Enter the ID of the zone: "))
+                
+                conn = create_connection()
+                if conn:
+                    object_data = {
+                        'name': name,
+                        'description': description,
+                        'zone_id': zone_id,
+                        'price': price,
+                        'quantity': quantity,
+                        'status_id': 1  # Default status
+                    }
+                    
+                    object_id = add_object(conn, object_data)
+                    if object_id:
+                        print(f"\nObject {name} added successfully with ID {object_id}")
+                    else:
+                        print(f"\nFailed to add object {name}")
+                    conn.close()
+                else:
+                    print("Failed to connect to database")
+            except ValueError as e:
+                print(f"\nInvalid input: Please enter numbers for price and quantity")
+            except Exception as e:
+                print(f"\nError: {e}")
+
+        elif choice == '2':
+            # Update object
+            conn = create_connection()
+            if conn:
+                objects = list_objects(conn)
+                print("Objects:")
+                for object in objects:
+                    print(f"ID: {object[0]}, Name: {object[1]}, Description: {object[2]}, Price: {object[3]}, Quantity: {object[4]}, Zone: {object[5]}, Status: {object[6]}")
+                print("Enter the ID of the object to update:")
+                object_id = input()
+                print("What you want to update?")
+                print("1. Name")
+                print("2. Description")
+                print("3. Price")
+                print("4. Quantity")
+                print("5. Zone")
+                print("6. Status")
+                print("7. Comment")
+                update_choice = input("Enter the number of the field to update:")
+                if update_choice == '1':
+                    name = input("Enter the new name:")
+                elif update_choice == '2':
+                    description = input("Enter the new description:")
+                elif update_choice == '3':
+                    price = input("Enter the new price:")
+                elif update_choice == '4':
+                    quantity = input("Enter the new quantity:")
+                elif update_choice == '5':
+                    zone_id = input("Enter the new zone ID:")
+                elif update_choice == '6':
+                    status = input("Enter the new status:")
+                elif update_choice == '7':
+                    comment = input("Enter the new comment:")
+                update_object(object_id, name, description, zone_id, price, quantity, status, comment)
+                print(f"Object {name} updated successfully")
+            else:
+                print("Failed to connect to database")
+        elif choice == '3':
+            # Delete object
+            conn = create_connection()
+            if conn:
+                objects = list_objects(conn)
+                print("Objects:")
+                for object in objects:
+                    print(f"ID: {object[0]}, Name: {object[1]}, Description: {object[2]}, Price: {object[3]}, Quantity: {object[4]}, Zone: {object[5]}, Status: {object[6]}")
+                print("Enter the ID of the object to delete:")
+                object_id = input()
+                delete_object(object_id)
+                print(f"Object {object_id} deleted successfully")
+            else:
+                print("Failed to connect to database")
+        elif choice == '4':
+            # Add new zone
+            conn = create_connection()
+            if conn:
+                zones = list_zones(conn)
+                if zones:
+                    print("Zones:")
+                    for zone in zones:
+                        print(f"ID: {zone[0]}, Name: {zone[1]}")
+                else:
+                    print("No zones found")
+                name = input("Enter the name of the zone:")
+                add_new_zone(name)
+            else:
+                print("Failed to connect to database")
+        elif choice == '5':
+            # Update zone
+            conn = create_connection()
+            if conn:
+                zones = list_zones(conn)
+                if zones:
+                    print("Zones:")
+                    for zone in zones:
+                        print(f"ID: {zone[0]}, Name: {zone[1]}")
+                else:
+                    print("No zones found")
+                zone_id = input("Enter the ID of the zone to update:")
+                print("What you want to update?")
+                print("1. Name")
+                print("2. Comment")
+                update_choice = input("Enter the number of the field to update:")
+                if update_choice == '1':
+                    name = input("Enter the new name:")
+                elif update_choice == '2':
+                    comment = input("Enter the new comment:")
+                update_zone(zone_id, name, comment)
+                print(f"Zone {name} updated successfully")
+            else:
+                print("Failed to connect to database")
+
+        elif choice == '6':
+            # Delete zone
+            conn = create_connection()
+            if conn:
+                zones = list_zones(conn)
+                if zones:
+                    print("Zones:")
+                    for zone in zones:
+                        print(f"ID: {zone[0]}, Name: {zone[1]}")
+                else:
+                    print("No zones found")
+                zone_id = input("Enter the ID of the zone to delete:")
+                delete_zone(zone_id)
+                print(f"Zone {zone_id} deleted successfully")
+            else:
+                print("Failed to connect to database")
+        elif choice == '7':
+            # List objects
+            conn = create_connection()
+            if conn:
+                list_objects(conn)
+            else:
+                print("Failed to connect to database")
+        elif choice == '8':
+            # List zones
+            display_zones()
+        elif choice == '9':
+            print("Exiting...")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 def init_db():
     conn = create_connection()
     if conn:
-        create_tables(conn)
+        create_table(conn)
         conn.close()
     else:
         print("Failed to connect to database")
@@ -136,19 +312,25 @@ def list_objects():
     else:
         print("Failed to connect to database")
 
-def list_zones():
+def display_zones():
     conn = create_connection()
     if conn:
-        zones = list_zones(conn)
-        if zones:
-            print("Zones:")
-            for zone in zones:
-                print(f"ID: {zone[0]}, Name: {zone[1]}")
-        else:
-            print("No zones found")
+        try:
+            zones = list_zones(conn)  # This calls the BD_2.py function
+            if zones:
+                print("\nZones:")
+                for zone in zones:
+                    print(f"ID: {zone[0]}, Name: {zone[1]}")
+            else:
+                print("No zones found")
+        finally:
+            conn.close()
     else:
         print("Failed to connect to database")
 
 
 if __name__ == '__main__':
+    # Initialize the database
     init_db()
+    # Handle user input
+    handle_user_input()
