@@ -40,23 +40,32 @@ def create_table(conn):
 
         """
 # 2
-        # Create zones table
+# Drop the existing zones table if it exists
+        cursor.execute("DROP TABLE IF EXISTS zones;")
+        print("Dropped existing zones table.")
+        
+        # Create zones table with the correct structure
         create_zones_table = """
         CREATE TABLE IF NOT EXISTS zones (
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            description TEXT,
+            creation_date DATETIME,
+            modification_date DATETIME,
+            deletion_date DATETIME
         );
         """
-        
-        
-
-        
+        print("Created zones table with new structure.")
 # 3
         # Create statuses table
         create_statuses_table = """
         CREATE TABLE IF NOT EXISTS statuses(
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            description TEXT,
+            creation_date DATETIME,
+            modification_date DATETIME,
+            deletion_date DATETIME
         )
 
         """
@@ -67,6 +76,10 @@ def create_table(conn):
         CREATE TABLE IF NOT EXISTS categories(
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
+            description TEXT,
+            creation_date DATETIME,
+            modification_date DATETIME,
+            deletion_date DATETIME
         )
 
         """
@@ -99,6 +112,8 @@ def create_table(conn):
         cursor.execute(create_categories_table)
         cursor.execute(create_history_table)
 
+        conn.commit()
+        print("Tables created successfully")
     except Error as e:
         print(f"Error creating table: {e}")
 
@@ -210,7 +225,6 @@ def add_zone(conn,data):
     except Error as e:
         print(f"Error adding zone {e}")
         conn.rollback()
-        print(f"Error adding zone {e}")
         return False
 
 def update_zone(conn,data):
@@ -251,6 +265,29 @@ def delete_zone(conn,zone_id):
         print(f"Error deleting zone {e}")
         return False
 
+## OPERATIONS WITH STATUS
+def add_status(conn,data):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO statuses (type)
+        VALUES (?)
+        """,(data['type'],))
+        print(f"Status {data['type']} added successfully")
+        conn.commit()
+        return cursor.lastrowid
+    except Error as e:
+        print(f"Error adding status {e}")
+        conn.rollback()
+        print(f"Error adding status {e}")
+        return False
+
+
+
+## OPERATIONS WITH CATEGORIES
+
+
+## OPERATIONS WITH OBJECTS
 def list_objects(conn):
     try:
         cursor = conn.cursor()
@@ -286,4 +323,15 @@ def list_zones(conn):
     except Error as e:
         print(f"Error listing zones: {e}")
         return []
+
+def check_table_schema():
+    conn = sqlite3.connect('inventory_2.db')
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(zones);")
+    columns = cursor.fetchall()
+    for column in columns:
+        print(column)
+    conn.close()
+
+check_table_schema()
 

@@ -1,5 +1,5 @@
 """ API INVENTORY MANAGEMENT SYSTEM"""
-
+from datetime import datetime
 from sqlite3 import Error
 from BD_2 import(
     create_connection,
@@ -10,12 +10,14 @@ from BD_2 import(
     add_zone,
     update_zone,
     delete_zone,
+    add_status,
     list_objects,
     list_zones
 )
 
 def display_menu():
     print("--------------------------------")
+    #print("Hello world por culpa de SHAUME")
     print("Inventory Management System")
     print("1. Add new object")
     print("2. Update object")
@@ -196,8 +198,38 @@ def handle_user_input():
 def init_db():
     conn = create_connection()
     if conn:
-        create_table(conn)
-        conn.close()
+        try:
+            create_table(conn)
+            
+            # Add default zones
+            cursor = conn.cursor()
+            default_zones = [
+                ("Machining Zone", "Zone for machining operations."),
+                ("Welding Zone", "Zone for welding operations."),
+                ("Printing Zone", "Zone for printing operations."),
+                ("Laser Zone", "Zone for laser operations.")
+            ]
+            for name, description in default_zones:
+                cursor.execute("SELECT id FROM zones WHERE name = ?", (name,))
+                if not cursor.fetchone():
+                    cursor.execute("""
+                        INSERT INTO zones (name, description, creation_date, modification_date, deletion_date)
+                        VALUES (?, ?, datetime('now'), datetime('now'), NULL)
+                    """, (name, description))
+            
+            # Add statuses
+            add_status(conn, {'type': 'Available'})
+            add_status(conn, {'type': 'Not Available'})
+            add_status(conn, {'type': 'In Repair'})
+            add_status(conn, {'type': 'In Use'})
+            
+            conn.commit()
+            print("Database initialized successfully.")
+        except Error as e:
+            print(f"Error initializing database: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
     else:
         print("Failed to connect to database")
 
@@ -265,7 +297,7 @@ def add_new_zone(name):
     conn = create_connection()
     if conn:
         zone_data = {
-            'name': name
+            'name': name,
         }
         zone_id = add_zone(conn, zone_data)
         if zone_id:
@@ -299,7 +331,7 @@ def delete_zone(zone_id):
     else:
         print("Failed to connect to database")
 
-def list_objects():
+def display_objects():
     conn = create_connection()
     if conn:
         objects = list_objects(conn)
@@ -321,8 +353,10 @@ def display_zones():
                 print("\nZones:")
                 for zone in zones:
                     print(f"ID: {zone[0]}, Name: {zone[1]}")
-            else:
-                print("No zones found")
+            # else:
+            #    print("No zones found")
+        except Error as e:
+            print(f"Error listing zones: {e}")
         finally:
             conn.close()
     else:
