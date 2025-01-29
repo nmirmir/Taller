@@ -74,8 +74,8 @@ def create_table(conn):
         # Create categories table
         create_categories_table = """
         CREATE TABLE IF NOT EXISTS categories(
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
             description TEXT,
             creation_date DATETIME,
             modification_date DATETIME,
@@ -204,28 +204,28 @@ def delete_object(conn,object_id):
 
 
 ## OPERATIONS WITH ZONES
-def add_zone(conn,data):
+def add_zone(conn, data):
     try:
         cursor = conn.cursor()
-
         # Check if zone already exists
         cursor.execute("""
         SELECT id FROM zones WHERE name = ?
-        """,(data['name']))
+        """, (data['name'],))  # Fixed tuple creation
         if cursor.fetchone():
             raise Exception("A zone with this name already exists")
         
         # Insert new zone
         cursor.execute("""
-            INSERT INTO zones (name)
-            VALUES (?)
-        """,(data['name'],))
+            INSERT INTO zones (name,description,creation_date,modification_date,deletion_date)
+            VALUES (?,?,?,?,?)
+        """, (data['name'], data['description'], data['creation_date'], data['modification_date'], data['deletion_date']))
         conn.commit()
         return cursor.lastrowid
-    except Error as e:
-        print(f"Error adding zone {e}")
+    except Exception as e:
+        print(f"Error adding zone: {e}")
         conn.rollback()
         return False
+
 
 def update_zone(conn,data):
     try:
@@ -270,10 +270,10 @@ def add_status(conn,data):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-        INSERT INTO statuses (type)
+        INSERT INTO statuses (name)
         VALUES (?)
-        """,(data['type'],))
-        print(f"Status {data['type']} added successfully")
+        """,(data['name'],))
+        print(f"Status {data['name']} added successfully")
         conn.commit()
         return cursor.lastrowid
     except Error as e:
@@ -285,6 +285,30 @@ def add_status(conn,data):
 
 
 ## OPERATIONS WITH CATEGORIES
+
+def add_category(conn,data):
+    try:
+        cursor = conn.cursor()
+        # Check if zone already exists
+        cursor.execute("""
+        SELECT id FROM categories WHERE name = ?
+        """, (data[1],))  # Fixed tuple creation
+        if cursor.fetchone():
+            raise Exception("A category with this name already exists")
+        
+        cursor.execute("""
+        INSERT INTO categories(name, description, creation_date, modification_date, deletion_date
+        VALUES(?,?,?,?,?)
+        """,(data[0],data[1],data[2],data[3],data[4]))
+        conn.commit()
+        return cursor.lastrowid
+
+
+        
+    except Error as e:
+        print(f"Error adding category {e}")
+        conn.rollback()
+        return False
 
 
 ## OPERATIONS WITH OBJECTS
@@ -310,10 +334,10 @@ def list_zones(conn):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, name
+            SELECT *
             FROM zones
             WHERE deletion_date IS NULL
-            ORDER BY name
+            ORDER BY id
         """)
         zones = cursor.fetchall()
         if not zones:

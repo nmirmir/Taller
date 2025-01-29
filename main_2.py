@@ -11,6 +11,7 @@ from BD_2 import(
     update_zone,
     delete_zone,
     add_status,
+    add_category,
     list_objects,
     list_zones
 )
@@ -132,8 +133,6 @@ def handle_user_input():
                     print("Zones:")
                     for zone in zones:
                         print(f"ID: {zone[0]}, Name: {zone[1]}")
-                else:
-                    print("No zones found")
                 name = input("Enter the name of the zone:")
                 add_new_zone(name)
             else:
@@ -196,11 +195,12 @@ def handle_user_input():
             print("Invalid choice. Please try again.")
 
 def init_db():
-    conn = create_connection()
+    conn = create_connection()  # Ensure create_connection() connects to your database
     if conn:
         try:
+            # Create tables
             create_table(conn)
-            
+
             # Add default zones
             cursor = conn.cursor()
             default_zones = [
@@ -209,20 +209,33 @@ def init_db():
                 ("Printing Zone", "Zone for printing operations."),
                 ("Laser Zone", "Zone for laser operations.")
             ]
+            #print(f"default zones: {default_zones}")
             for name, description in default_zones:
                 cursor.execute("SELECT id FROM zones WHERE name = ?", (name,))
-                if not cursor.fetchone():
+                if not cursor.fetchone():                    
                     cursor.execute("""
                         INSERT INTO zones (name, description, creation_date, modification_date, deletion_date)
                         VALUES (?, ?, datetime('now'), datetime('now'), NULL)
                     """, (name, description))
-            
-            # Add statuses
-            add_status(conn, {'type': 'Available'})
-            add_status(conn, {'type': 'Not Available'})
-            add_status(conn, {'type': 'In Repair'})
-            add_status(conn, {'type': 'In Use'})
-            
+
+            # Add default statuses
+            default_statuses = ['Available', 'Not Available', 'In Repair', 'In Use']
+            for status in default_statuses:
+                add_status(conn, {'name': status})
+
+            # Add default categories
+            import datetime
+
+            # Add default categories with current timestamps
+            default_categories = [
+                ('consumables', 'Something that has one use', datetime.datetime.now(), datetime.datetime.now(), None),
+                ('tools', 'What you use for actions', datetime.datetime.now(), datetime.datetime.now(), None)
+            ]
+
+            for category in default_categories:
+                add_category(conn,category)
+            print(f"default_categories{default_categories}")
+
             conn.commit()
             print("Database initialized successfully.")
         except Error as e:
@@ -232,6 +245,7 @@ def init_db():
             conn.close()
     else:
         print("Failed to connect to database")
+
 
 def add_new_object(name,description,zone_id,price,quantity,status,comment=None):
     conn = create_connection()
@@ -331,6 +345,22 @@ def delete_zone(zone_id):
     else:
         print("Failed to connect to database")
 
+def add_categor(name):
+    conn = create_connection()
+    if conn:
+        category_data = {
+            'name': name,
+        }
+        category_id = add_category(conn, category_data)
+        if category_id:
+            print(f"Category {name} added successfully with ID {category_id}")
+        else:
+            print(f"Failed to add category {name}")
+    else:
+        print("Failed to connect to database")
+
+
+
 def display_objects():
     conn = create_connection()
     if conn:
@@ -349,6 +379,7 @@ def display_zones():
     if conn:
         try:
             zones = list_zones(conn)  # This calls the BD_2.py function
+            print(f"zones: {zones}")
             if zones:
                 print("\nZones:")
                 for zone in zones:
@@ -361,6 +392,8 @@ def display_zones():
             conn.close()
     else:
         print("Failed to connect to database")
+
+
 
 
 if __name__ == '__main__':
