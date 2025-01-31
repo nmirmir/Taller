@@ -339,9 +339,8 @@ def list_objects(conn):
 def list_zones(conn):
     try:
         cursor = conn.cursor()
-        print("ZONES 1")
         cursor.execute("""
-            SELECT *
+            SELECT id,name
             FROM zones
             WHERE deletion_date IS NULL
             ORDER BY id
@@ -350,6 +349,8 @@ def list_zones(conn):
         if not zones:
             print("No zones found")
             return []
+        for zone in zones:
+            print(f"ID: {zone[0]} - {zone[1]}")  # Display zones
         return zones
     except Error as e:
         print(f"Error listing zones: {e}")

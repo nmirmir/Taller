@@ -49,7 +49,10 @@ def handle_user_input():
                 
                 conn = create_connection()
                 # Show available zones
+                print("--------------------------------")
+                print("AVAILABLE ZONES: ")
                 list_zones(conn)
+                print("--------------------------------")
                 
                 zone_id = int(input("Enter the ID of the zone: "))
                 if conn:
@@ -193,7 +196,6 @@ def handle_user_input():
             if conn:
                 try:
                     zones = list_zones(conn)
-                    print(f"Zones: {zones}")
                 except Error as e:
                     print(f"Error listing zones: {e}")
                 finally:
