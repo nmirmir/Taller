@@ -31,7 +31,6 @@ def create_table(conn):
             creation_date DATETIME,
             modification_date DATETIME,
             deletion_date DATETIME,
-            FOREIGN KEY (category_id) REFERENCES categories (id),
             FOREIGN KEY (zone_id) REFERENCES zones (id),
             FOREiGN KEY (status_id) REFERENCES statuses (id)
         
@@ -39,6 +38,7 @@ def create_table(conn):
         )
 
         """
+                    #FOREIGN KEY (category_id) REFERENCES categories (id),
 # 2
 # Drop the existing zones table if it exists
         cursor.execute("DROP TABLE IF EXISTS zones;")
@@ -123,28 +123,34 @@ def create_table(conn):
 def add_object(conn, data):
     """ Add a new object into database"""
     try:
+        #category_id,
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO objects (
                 name,
                 description, 
                 price, 
-                quantity,
-                category_id, 
+                quantity, 
                 zone_id, 
-                status_id
+                status_id,
+                creation_date,
+                modification_date,
+                deletion_date
             )
-            VALUES (?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'),NULL)
         """,(
             data['name'],
             data['description'],
             data['price'],
             data['quantity'],
-            data['category_id'],
             data['zone_id'],
-            data['status_id']
+            data['status_id'],
+            data['creation_date'],
+            data['modification_date'],
+            data['deletion_date'],
         ))
         conn.commit()
+        #data['category_id'],
         return cursor.lastrowid
     except Error as e:
         print(f"Error adding object: {e}")
@@ -313,10 +319,12 @@ def add_category(conn,data):
 
 ## OPERATIONS WITH OBJECTS
 def list_objects(conn):
-    try:
+    try:#creation_date DATETIME,
+        #   modification_date DATETIME,
+        #  deletion_date DATETIME,
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT o.id, o.name, o.description, o.price, o.quantity, o.category_id, o.zone_id, o.status_id
+            SELECT o.id, o.name, o.description, o.price, o.quantity, o.category_id, o.zone_id, o.status_id, o.creation_date, o.modification_date, o.deletion_date
             FROM objects o
             WHERE deletion_date IS NULL
             ORDER BY o.quantity DESC
@@ -325,6 +333,7 @@ def list_objects(conn):
         if not objects:
             print("No objects found")
             return []
+        print(f"Objects: {objects}")
         return objects
     except Error as e:
         print(f"Error listing objects: {e}")
@@ -333,6 +342,7 @@ def list_objects(conn):
 def list_zones(conn):
     try:
         cursor = conn.cursor()
+        print("ZONES 1")
         cursor.execute("""
             SELECT *
             FROM zones

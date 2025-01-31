@@ -39,17 +39,17 @@ def handle_user_input():
         if choice == '1':
             # Add new object
             try:
+                
                 name = input("Enter the name of the object: ")
                 description = input("Enter the description of the object: ")
                 price = float(input("Enter the price of the object: "))
                 quantity = int(input("Enter the quantity of the object: "))
                 
+                conn = create_connection()
                 # Show available zones
-                display_zones()
+                list_zones(conn)
                 
                 zone_id = int(input("Enter the ID of the zone: "))
-                
-                conn = create_connection()
                 if conn:
                     object_data = {
                         'name': name,
@@ -187,7 +187,15 @@ def handle_user_input():
                 print("Failed to connect to database")
         elif choice == '8':
             # List zones
-            display_zones()
+            conn = create_connection()
+            if conn:
+                try:
+                    zones = list_zones(conn)
+                    print(f"Zones: {zones}")
+                except Error as e:
+                    print(f"Error listing zones: {e}")
+                finally:
+                    conn.close()
         elif choice == '9':
             print("Exiting...")
             break
@@ -371,25 +379,6 @@ def display_objects():
                 print(f"ID: {object[0]}, Name: {object[1]}, Description: {object[2]}, Price: {object[3]}, Quantity: {object[4]}, Zone: {object[5]}, Status: {object[6]}")
         else:
             print("No objects found")
-    else:
-        print("Failed to connect to database")
-
-def display_zones():
-    conn = create_connection()
-    if conn:
-        try:
-            zones = list_zones(conn)  # This calls the BD_2.py function
-            print(f"zones: {zones}")
-            if zones:
-                print("\nZones:")
-                for zone in zones:
-                    print(f"ID: {zone[0]}, Name: {zone[1]}")
-            # else:
-            #    print("No zones found")
-        except Error as e:
-            print(f"Error listing zones: {e}")
-        finally:
-            conn.close()
     else:
         print("Failed to connect to database")
 
