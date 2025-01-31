@@ -144,10 +144,7 @@ def add_object(conn, data):
             data['price'],
             data['quantity'],
             data['zone_id'],
-            data['status_id'],
-            data['creation_date'],
-            data['modification_date'],
-            data['deletion_date'],
+            data['status_id']
         ))
         conn.commit()
         #data['category_id'],

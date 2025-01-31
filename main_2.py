@@ -44,6 +44,8 @@ def handle_user_input():
                 description = input("Enter the description of the object: ")
                 price = float(input("Enter the price of the object: "))
                 quantity = int(input("Enter the quantity of the object: "))
+                #status = int(input("Enter status of the object: "))        MEJORA
+                #list_statuses(conn)
                 
                 conn = create_connection()
                 # Show available zones
