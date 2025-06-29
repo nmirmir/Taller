@@ -335,7 +335,14 @@ def list_objects(conn):
     except Error as e:
         print(f"Error listing objects: {e}")
         return []
-
+'''
+def list_objects_by_zone(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT zones.name
+        """)
+'''
 def list_zones(conn):
     try:
         cursor = conn.cursor()
